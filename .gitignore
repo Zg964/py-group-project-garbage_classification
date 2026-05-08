@@ -35,12 +35,6 @@ wheels/
 .ipynb_checkpoints/
 *.ipynb
 
-# Data
-data/raw/*
-data/processed/*
-!data/raw/.gitkeep
-!data/processed/.gitkeep
-
 # Models
 models/*.pth
 models/*.pt
@@ -71,7 +65,4 @@ Thumbs.db
 *.bak
 *.cache
 
-# Large files
-*.zip
-*.tar.gz
-*.rar
+

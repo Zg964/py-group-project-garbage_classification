@@ -1,0 +1,32 @@
+{
+  "timestamp": "D:\\claude_code\\teamwork--copilot\\garbage_classification",
+  "initial_stats": {
+    "total_images": 2527,
+    "class_distribution": {
+      "cardboard": 403,
+      "glass": 501,
+      "metal": 410,
+      "paper": 594,
+      "plastic": 482,
+      "trash": 137
+    },
+    "corrupted_files": 0,
+    "missing_files": 0
+  },
+  "final_stats": {
+    "total_images": 2497,
+    "class_distribution": {
+      "cardboard": 403,
+      "glass": 500,
+      "metal": 402,
+      "paper": 581,
+      "plastic": 475,
+      "trash": 136
+    },
+    "corrupted_count": 0,
+    "missing_files": 0
+  },
+  "removed_corrupted": 0,
+  "removed_duplicates": 27,
+  "label_issues": 0
+}
