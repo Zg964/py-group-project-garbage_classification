@@ -105,16 +105,23 @@ class MobileNetV2Model(nn.Module):
 
 class ResNet18Model(nn.Module):
     """基于 ResNet18 的转移学习模型"""
-    
+
     def __init__(self, num_classes=6, pretrained=True):
         super(ResNet18Model, self).__init__()
-        
+
         # 加载预训练的 ResNet18
         self.resnet = models.resnet18(pretrained=pretrained)
-        
-        # 替换最后一层全连接层
+
+        # 替换为带 Dropout 和 BN 的分类头
         num_features = self.resnet.fc.in_features
-        self.resnet.fc = nn.Linear(num_features, num_classes)
+        self.resnet.fc = nn.Sequential(
+            nn.Dropout(0.3),
+            nn.Linear(num_features, 512),
+            nn.BatchNorm1d(512),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.3),
+            nn.Linear(512, num_classes)
+        )
     
     def forward(self, x):
         return self.resnet(x)
