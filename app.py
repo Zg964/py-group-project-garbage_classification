@@ -12,6 +12,7 @@ from pathlib import Path
 import json
 from src.models import create_model
 from src.data_loader import GARBAGE_CLASSES, get_transforms
+from src import __version__ as app_version
 
 # 页面配置
 st.set_page_config(
@@ -313,9 +314,9 @@ def main():
     st.markdown("---")
     st.markdown("""
     <div style='text-align: center'>
-        <p>智能垃圾分类系统 | 基于深度学习 | ♻️ 保护环境，从分类开始</p>
+        <p>智能垃圾分类系统 v{} | 基于深度学习 | ♻️ 保护环境，从分类开始</p>
     </div>
-    """, unsafe_allow_html=True)
+    """.format(app_version), unsafe_allow_html=True)
 
 
 if __name__ == '__main__':
