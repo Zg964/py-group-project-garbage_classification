@@ -52,22 +52,22 @@ print(f"垃圾分类类别: {', '.join(GARBAGE_CLASSES)}")
 if Path('data/processed').exists() and len(list(Path('data/processed').glob('*/*.*'))) > 0:
     try:
         train_loader, val_loader, test_loader = create_dataloaders(
-            'data/processed', 
+            'data/processed',
             batch_size=32,
             num_workers=0
         )
-        
+
         print(f"训练集: {len(train_loader.dataset)} 张图像")
         print(f"验证集: {len(val_loader.dataset)} 张图像")
         print(f"测试集: {len(test_loader.dataset)} 张图像")
-        
+
         # 显示一个批次的信息
         images, labels, paths = next(iter(train_loader))
         print(f"\n批次信息:")
         print(f"  图像形状: {images.shape} (batch_size, channels, height, width)")
         print(f"  标签: {labels[:5].tolist()} (前5个)")
         print(f"  样本路径: {Path(paths[0]).name}")
-        
+
     except Exception as e:
         print(f"⚠ 无法加载数据: {e}")
         print("请先下载并准备数据集")
@@ -84,7 +84,7 @@ history_path = Path('models/training_history.json')
 if history_path.exists():
     with open(history_path) as f:
         history = json.load(f)
-    
+
     for model_name, data in history.items():
         print(f"\n{model_name}:")
         if 'best_val_acc' in data:
@@ -104,14 +104,14 @@ results_path = Path('logs/evaluation_results.json')
 if results_path.exists():
     with open(results_path) as f:
         results = json.load(f)
-    
+
     print("\n模型性能对比:")
     print(f"{'模型':<15} {'准确率':>10} {'Macro-F1':>10} {'推理时间':>10}")
     print("-" * 50)
-    
+
     for model_name, metrics in results.items():
         print(f"{model_name:<15} {metrics['accuracy']:>9.1%} {metrics['macro_f1']:>10.4f} {metrics['inference_time_ms']:>9.2f}ms")
-    
+
     # 选择最好的模型
     best_model = max(results.items(), key=lambda x: x[1]['accuracy'])
     print(f"\n最佳模型: {best_model[0]} (准确率: {best_model[1]['accuracy']:.1%})")
@@ -127,43 +127,40 @@ print("=" * 80)
 from PIL import Image
 import torchvision.transforms as transforms
 
-sample_image_path = None
-for cls in GARBAGE_CLASSES:
-    cls_dir = Path('data/processed') / cls
-    if cls_dir.exists():
-        images = list(cls_dir.glob('*.jpg')) + list(cls_dir.glob('*.png'))
-        if images:
-            sample_image_path = images[0]
-            break
+data_processed = Path('data/processed')
+if not data_processed.exists():
+    print("⚠ 数据目录 'data/processed' 不存在")
+    print("请先下载并准备数据集: python download_dataset.py")
+    sample_image_path = None
+else:
+    sample_image_path = None
+    for cls in GARBAGE_CLASSES:
+        cls_dir = data_processed / cls
+        if cls_dir.exists():
+            images = list(cls_dir.glob('*.jpg')) + list(cls_dir.glob('*.png'))
+            if images:
+                sample_image_path = images[0]
+                break
 
 if sample_image_path:
     print(f"加载示例图像: {sample_image_path.name}")
-    
+
     # 加载模型
     model = create_model('resnet18', num_classes=6)
     best_model_path = Path('models/resnet18_best.pth')
-    
+
     if best_model_path.exists():
         model.load_state_dict(torch.load(best_model_path, map_location=device))
         model.to(device)
         model.eval()
-        
-        # 预处理图像
-        _, val_transform = transforms.Compose([
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                std=[0.229, 0.224, 0.225])
-        ]), None
-        
+
+        # 预处理图像 — 复用 get_transforms()
+        from src.data_loader import get_transforms
+        _, val_transform = get_transforms()
+
         image = Image.open(sample_image_path).convert('RGB')
-        image_tensor = transforms.Compose([
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                std=[0.229, 0.224, 0.225])
-        ])(image).unsqueeze(0).to(device)
-        
+        image_tensor = val_transform(image).unsqueeze(0).to(device)
+
         # 预测
         with torch.no_grad():
             output = model(image_tensor)
@@ -171,11 +168,11 @@ if sample_image_path:
             predicted_idx = torch.argmax(probabilities, dim=1).item()
             predicted_class = GARBAGE_CLASSES[predicted_idx]
             confidence = probabilities[0, predicted_idx].item()
-        
+
         print(f"\n预测结果:")
         print(f"  预测类别: {predicted_class}")
         print(f"  置信度: {confidence:.1%}")
-        
+
         print(f"\n各类别概率:")
         for idx, cls in enumerate(GARBAGE_CLASSES):
             prob = probabilities[0, idx].item()
@@ -186,7 +183,7 @@ if sample_image_path:
         print("请先运行: python run.py --task train")
 else:
     print("⚠ 示例图像不存在")
-    print("请先下载数据集")
+    print("请先下载数据集或检查 data/processed 目录")
 
 # 示例 7: 项目结构说明
 print("\n" + "=" * 80)
@@ -204,11 +201,11 @@ garbage_classification/
 │
 ├── src/                           源代码
 │   ├── __init__.py               项目初始化
-│   ├── data_loader.py            数据加载模块 (~1200 行)
-│   ├── data_cleaning.py          数据清洗模块 (~450 行)
-│   ├── models.py                 模型定义 (~250 行)
-│   ├── train.py                  训练脚本 (~350 行)
-│   └── evaluate.py               评估脚本 (~380 行)
+│   ├── data_loader.py            数据加载模块
+│   ├── data_cleaning.py          数据清洗模块
+│   ├── models.py                 模型定义
+│   ├── train.py                  训练脚本
+│   └── evaluate.py               评估脚本
 │
 ├── models/                        保存的模型权重
 │   ├── simple_cnn_best.pth

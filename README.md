@@ -459,6 +459,19 @@ MIT License
 
 ## 更新日志
 
+### v1.02 (2025-05-15)
+
+- **Bug 修复**:
+  - CUDA Event 在纯 CPU 环境崩溃修复（添加 `time.perf_counter()` 备选）
+  - Windows 上 `num_workers` 硬编码修复（默认改为 0）
+  - `demo.py` 废弃变换代码清理（复用 `get_transforms()`）
+  - `demo.py` 数据目录缺失时给出明确错误提示
+  - 修正 `demo.py` 中夸大的行数声明
+- **改进**:
+  - 添加类别权重（`CrossEntropyLoss(weight=...)`）解决 trash 类数据不平衡
+  - 增强数据增强（Rotation 20°→30°，新增 hue=0.1 和 RandomPerspective）
+  - 简化冗余 JSON 序列化代码
+
 ### v1.01 (2026-05-12)
 
 - ✓ ResNet18 分类头增强（添加 Dropout + BN 层）
@@ -475,6 +488,6 @@ MIT License
 
 ---
 
-**最后更新**: 2026年5月12日
+**最后更新**: 2025年5月15日
 
 **项目状态**: 开发中 🚀
