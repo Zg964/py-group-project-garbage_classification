@@ -173,7 +173,7 @@ class Evaluator:
         return fig
 
 
-def evaluate_baseline_models(data_dir, models_dir='models', output_dir='logs', num_workers=0):
+def evaluate_baseline_models(data_dir, models_dir='models', output_dir='logs', num_workers=0, models_to_evaluate=None):
     """评估所有基线模型"""
 
     output_dir = Path(output_dir)
@@ -187,12 +187,17 @@ def evaluate_baseline_models(data_dir, models_dir='models', output_dir='logs', n
     logger.info("加载测试数据...")
     _, _, test_loader = create_dataloaders(data_dir, batch_size=32, num_workers=num_workers)
 
-    # 模型配置
+    # 模型配置（v1.03: 新增 EfficientNetV2-S 和 ConvNeXt Tiny）
     models_config = [
         {'name': 'simple_cnn', 'pretrained': False},
         {'name': 'mobilenetv2', 'pretrained': True},
         {'name': 'resnet18', 'pretrained': True},
+        {'name': 'efficientnetv2s', 'pretrained': True},
+        {'name': 'convnexttiny', 'pretrained': True},
     ]
+
+    if models_to_evaluate is not None:
+        models_config = [c for c in models_config if c['name'] in models_to_evaluate]
 
     all_metrics = {}
     all_predictions = {}
@@ -205,10 +210,14 @@ def evaluate_baseline_models(data_dir, models_dir='models', output_dir='logs', n
         model = create_model(model_name, num_classes=len(GARBAGE_CLASSES),
                              pretrained=config['pretrained'])
 
-        # 加载最好的权重
+        # 加载最好的权重（兼容 v1.03 的 checkpoint 格式）
         best_model_path = models_dir / f'{model_name}_best.pth'
         if best_model_path.exists():
-            model.load_state_dict(torch.load(best_model_path, map_location=device))
+            checkpoint = torch.load(best_model_path, map_location=device)
+            if 'model_state_dict' in checkpoint:
+                model.load_state_dict(checkpoint['model_state_dict'])
+            else:
+                model.load_state_dict(checkpoint)
             logger.info(f"已加载模型权重：{best_model_path}")
         else:
             logger.warning(f"未找到模型权重：{best_model_path}")

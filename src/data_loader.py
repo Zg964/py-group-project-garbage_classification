@@ -18,7 +18,10 @@ from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 import logging
 
-from src.config import GARBAGE_CLASSES, CLASS_TO_IDX, IDX_TO_CLASS, TEST_SIZE, VAL_RATIO, RANDOM_SEED
+from src.config import (GARBAGE_CLASSES, CLASS_TO_IDX, IDX_TO_CLASS,
+                        TEST_SIZE, VAL_RATIO, RANDOM_SEED,
+                        RANDAUGMENT_NUM_OPS, RANDAUGMENT_MAGNITUDE,
+                        MIXUP_ALPHA)
 
 # 向后兼容的导入
 
@@ -289,11 +292,18 @@ class GarbageDataset(Dataset):
         return image, label, img_path
 
 
-def get_transforms():
-    """获取数据增强变换"""
+def get_transforms(use_randaugment=False):
+    """获取数据增强变换
 
-    # 训练集变换（包含数据增强）
-    train_transform = transforms.Compose([
+    Args:
+        use_randaugment: 是否使用 RandAugment 增强
+
+    Returns:
+        train_transform, val_test_transform
+    """
+
+    # 基础增强
+    augmentations = [
         transforms.Resize((224, 224)),
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.RandomVerticalFlip(p=0.3),
@@ -301,6 +311,20 @@ def get_transforms():
         transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
         transforms.RandomPerspective(distortion_scale=0.1, p=0.3),
         transforms.RandomAffine(degrees=0, translate=(0.1, 0.1)),
+    ]
+
+    # v1.03: RandAugment 自动增强策略
+    if use_randaugment:
+        try:
+            randaugment = transforms.RandAugment(
+                num_ops=RANDAUGMENT_NUM_OPS,
+                magnitude=RANDAUGMENT_MAGNITUDE
+            )
+            augmentations.insert(1, randaugment)
+        except Exception as e:
+            logger.warning(f"RandAugment 不可用，跳过: {e}")
+
+    train_transform = transforms.Compose(augmentations + [
         transforms.ToTensor(),
         transforms.Normalize(
             mean=[0.485, 0.456, 0.406],
@@ -321,16 +345,57 @@ def get_transforms():
     return train_transform, val_test_transform
 
 
-def create_dataloaders(data_dir, batch_size=32, num_workers=4):
-    """创建数据加载器"""
-    train_transform, val_test_transform = get_transforms()
+class MixUpCollate:
+    """v1.03: MixUp 批量合成样本"""
+
+    def __init__(self, alpha=MIXUP_ALPHA):
+        self.alpha = alpha
+
+    def __call__(self, batch):
+        images, labels, paths = zip(*batch)
+        images = torch.stack(images, 0)
+        labels = torch.tensor(labels)
+        paths = list(paths)
+
+        if self.alpha > 0:
+            lam = np.random.beta(self.alpha, self.alpha)
+            batch_size = images.size(0)
+            index = torch.randperm(batch_size)
+
+            mixed_images = lam * images + (1 - lam) * images[index, :]
+            labels_a, labels_b = labels, labels[index]
+
+            return mixed_images, labels_a, labels_b, lam, paths
+
+        return images, labels, paths
+
+
+def create_dataloaders(data_dir, batch_size=32, num_workers=4,
+                       use_randaugment=False, use_mixup=False):
+    """创建数据加载器
+
+    Args:
+        data_dir: 数据目录
+        batch_size: 批大小
+        num_workers: 工作进程数
+        use_randaugment: 是否使用 RandAugment
+        use_mixup: 是否使用 MixUp
+
+    Returns:
+        train_loader, val_loader, test_loader
+    """
+    train_transform, val_test_transform = get_transforms(use_randaugment=use_randaugment)
 
     train_dataset = GarbageDataset(data_dir, split='train', transform=train_transform)
     val_dataset = GarbageDataset(data_dir, split='val', transform=val_test_transform)
     test_dataset = GarbageDataset(data_dir, split='test', transform=val_test_transform)
 
+    # v1.03: MixUp collate 函数
+    collate_fn = MixUpCollate() if use_mixup else None
+
     train_loader = DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers
+        train_dataset, batch_size=batch_size, shuffle=True,
+        num_workers=num_workers, collate_fn=collate_fn
     )
     val_loader = DataLoader(
         val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers

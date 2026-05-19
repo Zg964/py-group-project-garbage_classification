@@ -1,6 +1,6 @@
 """
 模型定义模块
-包含自定义 CNN、MobileNetV2 和 ResNet18 模型
+包含自定义 CNN、MobileNetV2、ResNet18、EfficientNetV2-S 和 ConvNeXt Tiny 模型
 """
 
 import torch
@@ -122,20 +122,61 @@ class ResNet18Model(nn.Module):
             nn.Dropout(0.3),
             nn.Linear(512, num_classes)
         )
-    
+
     def forward(self, x):
         return self.resnet(x)
+
+
+class EfficientNetV2SModel(nn.Module):
+    """基于 EfficientNetV2-S 的转移学习模型（v1.03 新增）"""
+
+    def __init__(self, num_classes=6, pretrained=True):
+        super(EfficientNetV2SModel, self).__init__()
+
+        self.efficientnet = models.efficientnet_v2_s(pretrained=pretrained)
+
+        # 替换分类头
+        num_features = self.efficientnet.classifier[1].in_features
+        self.efficientnet.classifier = nn.Sequential(
+            nn.Dropout(0.2),
+            nn.Linear(num_features, num_classes)
+        )
+
+    def forward(self, x):
+        return self.efficientnet(x)
+
+
+class ConvNeXtTinyModel(nn.Module):
+    """基于 ConvNeXt Tiny 的转移学习模型（v1.03 新增）"""
+
+    def __init__(self, num_classes=6, pretrained=True):
+        super(ConvNeXtTinyModel, self).__init__()
+
+        self.convnext = models.convnext_tiny(pretrained=pretrained)
+
+        # 替换分类头
+        num_features = self.convnext.classifier[2].in_features
+        self.convnext.classifier = nn.Sequential(
+            nn.Flatten(1),
+            nn.LayerNorm(num_features, eps=1e-6),
+            nn.Dropout(0.2),
+            nn.Linear(num_features, num_classes)
+        )
+
+    def forward(self, x):
+        return self.convnext(x)
 
 
 def create_model(model_name: str, num_classes: int = 6, pretrained: bool = True) -> nn.Module:
     """
     创建指定的模型
-    
+
     Args:
-        model_name: 模型名称 ('simple_cnn', 'mobilenetv2', 'resnet18')
+        model_name: 模型名称 ('simple_cnn', 'mobilenetv2', 'resnet18',
+                     'efficientnetv2s', 'convnexttiny')
         num_classes: 分类数量
         pretrained: 是否使用预训练权重
-    
+
     Returns:
         模型实例
     """
@@ -145,6 +186,10 @@ def create_model(model_name: str, num_classes: int = 6, pretrained: bool = True)
         return MobileNetV2Model(num_classes=num_classes, pretrained=pretrained)
     elif model_name.lower() == 'resnet18':
         return ResNet18Model(num_classes=num_classes, pretrained=pretrained)
+    elif model_name.lower() == 'efficientnetv2s':
+        return EfficientNetV2SModel(num_classes=num_classes, pretrained=pretrained)
+    elif model_name.lower() == 'convnexttiny':
+        return ConvNeXtTinyModel(num_classes=num_classes, pretrained=pretrained)
     else:
         raise ValueError(f"未知的模型名称: {model_name}")
 
