@@ -40,9 +40,10 @@ garbage_classification/
 │   ├── __init__.py               # 项目初始化
 │   ├── data_loader.py            # 数据加载和预处理
 │   ├── data_cleaning.py          # 数据清洗脚本
-│   ├── models.py                 # 模型定义 (CNN, MobileNetV2, ResNet18)
+│   ├── models.py                 # 模型定义 (CNN, MobileNetV2, ResNet18, EfficientNetV2-S, ConvNeXt Tiny)
 │   ├── train.py                  # 模型训练脚本
-│   └── evaluate.py               # 模型评估脚本
+│   ├── evaluate.py               # 模型评估脚本
+│   └── inference.py              # 模型推理模块（v1.03 新增）
 ├── models/                        # 保存的模型权重
 ├── logs/                          # 训练日志和评估结果
 ├── notebooks/                     # Jupyter 笔记本
@@ -150,6 +151,18 @@ python run.py --task train --epochs 50 --batch-size 32
    - 速度: 中等
    - 性能: 最高
    - 推荐用于精确分类
+
+4. **EfficientNetV2-S** (v1.03 新增) - 高效网络
+   - 参数量: ~21M
+   - 最佳精度/效率比
+   - Fused-MBConv 模块
+   - 对中小数据集迁移学习效果好
+
+5. **ConvNeXt Tiny** (v1.03 新增) - 现代 CNN
+   - 参数量: ~28M
+   - 最先进的纯 CNN 架构
+   - 融入 Transformer 设计理念
+   - 精度潜力最高
 
 ### 5. 模型评估
 
@@ -268,8 +281,15 @@ print(f"Macro-F1: {metrics['macro_f1']:.4f}")
 
 ### 模型特性
 
-- ✓ 三个不同深度和复杂度的基线模型
+- ✓ 五个不同深度和复杂度的模型（v1.03: +EfficientNetV2-S, +ConvNeXt Tiny）
 - ✓ 预训练权重支持（ImageNet）
+- ✓ Focal Loss 聚焦难分类样本（v1.03 新增）
+- ✓ 标签平滑减少过拟合（v1.03 新增）
+- ✓ CosineAnnealingWarmRestarts 周期性调度器（v1.03 新增）
+- ✓ 梯度裁剪防止梯度爆炸（v1.03 新增）
+- ✓ Early Stopping 防止过拟合（v1.03 新增）
+- ✓ RandAugment 自动增强策略（v1.03 新增）
+- ✓ MixUp 批量合成样本（v1.03 新增）
 - ✓ 自适应学习率调整
 - ✓ 最优模型自动保存
 - ✓ 详细的训练日志
@@ -294,13 +314,17 @@ print(f"Macro-F1: {metrics['macro_f1']:.4f}")
 
 ## 性能基准
 
-基于 NVIDIA GPU（RTX 3090） 的实测数据：
+基于 NVIDIA GPU（RTX 3090/5060） 的实测数据：
 
-| 模型 | 参数量 | 准确率 | Macro-F1 | 推理时间 |
-|------|--------|--------|---------|---------|
-| SimpleCNN | 1.2M | 92.3% | 0.920 | 5.2ms |
-| MobileNetV2 | 3.5M | 94.7% | 0.946 | 3.8ms |
-| ResNet18 | 11.2M | 96.1% | 0.961 | 7.5ms |
+| 模型 | 参数量 | 测试准确率 | Macro-F1 | 推理时间 |
+|------|--------|-----------|---------|---------|
+| SimpleCNN | 1.2M | 51.80% | 0.5179 | 24.26ms |
+| MobileNetV2 | 3.5M | 82.00% | 0.8042 | 16.19ms |
+| ResNet18 | 11.2M | 78.00% | 0.7632 | 15.33ms |
+| **EfficientNetV2-S** | **~21M** | **90.00%** | **0.8895** | 46.28ms |
+| ConvNeXt Tiny | ~28M | 39.40% | 0.3736 | 205.10ms |
+
+> v1.03 最佳模型: **EfficientNetV2-S**（测试准确率 90.00%, Macro-F1 0.8895）
 
 ---
 
@@ -459,6 +483,28 @@ MIT License
 
 ## 更新日志
 
+### v1.03 (2026-05-19)
+
+- **新模型架构**:
+  - 新增 EfficientNetV2-S（~21M 参数）：Fused-MBConv 模块，最佳精度/效率比
+  - 新增 ConvNeXt Tiny（~28M 参数）：最先进的纯 CNN + Transformer 设计理念
+- **训练流程优化**:
+  - Focal Loss（gamma=2.0）：替代 CrossEntropyLoss，聚焦 trsh 难分类
+  - CosineAnnealingWarmRestarts 调度器（T_0=10, T_mult=2）
+  - Label Smoothing（epsilon=0.1）：减少过拟合
+  - 梯度裁剪（max_norm=1.0）：防止梯度爆炸
+  - Early Stopping（patience=10）：防止过拟合
+- **数据增强优化**:
+  - RandAugment（num_ops=2, magnitude=9）：自动增强策略组合
+  - MixUp（alpha=0.2）：批量合成样本，缓解类别不平衡
+- **新功能**:
+  - 新增推理模块 `src/inference.py`（单张/批量预测 + 垃圾分类建议）
+  - 实验报告 `experiment_report.md`
+- **CLI 增强**:
+  - `--models`：选择要训练/评估的模型
+  - `--randaugment` / `--mixup` / `--use-focal` / `--use-label-smoothing` / `--use-cosine`
+  - `--task inference` 推理模式
+
 ### v1.02 (2025-05-15)
 
 - **Bug 修复**:
@@ -488,6 +534,6 @@ MIT License
 
 ---
 
-**最后更新**: 2025年5月15日
+**最后更新**: 2026年5月19日
 
 **项目状态**: 开发中 🚀

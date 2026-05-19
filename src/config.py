@@ -23,6 +23,20 @@ DEFAULT_BATCH_SIZE = 32
 DEFAULT_NUM_EPOCHS = 50
 DEFAULT_LEARNING_RATE = 0.001
 DEFAULT_WEIGHT_DECAY = 1e-4
+NUM_WORKERS = 0
+
+# v1.03 新增训练超参数
+FOCAL_LOSS_GAMMA = 2.0          # Focal Loss 聚焦参数
+LABEL_SMOOTHING_EPSILON = 0.1   # 标签平滑系数
+COSINE_T_0 = 10                  # CosineAnnealingWarmRestarts 初始周期
+COSINE_T_MULT = 2                # 周期增长倍数
+GRAD_CLIP_MAX_NORM = 1.0        # 梯度裁剪最大范数
+EARLY_STOPPING_PATIENCE = 10     # Early Stopping 耐心值
+
+# v1.03 数据增强参数
+RANDAUGMENT_NUM_OPS = 2         # RandAugment 操作数量
+RANDAUGMENT_MAGNITUDE = 9       # RandAugment 增强强度
+MIXUP_ALPHA = 0.2                # MixUp 混合参数
 
 # 图像相关
 IMAGE_MEAN = [0.485, 0.456, 0.406]
