@@ -1,7 +1,6 @@
-"""
-模型训练脚本
-v1.03: 新增 FocalLoss、CosineAnnealingWarmRestarts、Label Smoothing、
-       梯度裁剪、Early Stopping、MixUp 支持
+""" 模型训练脚本
+v1.03: 新增 FocalLoss、CosineAnnealingWarmRestarts、Label Smoothing、梯度裁剪、Early Stopping、MixUp 支持
+v1.04: 新增 One Cycle 学习率调度器、CutMix 支持
 """
 
 import os
@@ -17,9 +16,12 @@ from datetime import datetime
 
 from src.models import create_model, count_parameters
 from src.data_loader import create_dataloaders, GARBAGE_CLASSES
-from src.config import (FOCAL_LOSS_GAMMA, LABEL_SMOOTHING_EPSILON,
-                        COSINE_T_0, COSINE_T_MULT, GRAD_CLIP_MAX_NORM,
-                        EARLY_STOPPING_PATIENCE, NUM_WORKERS)
+from src.config import (
+    FOCAL_LOSS_GAMMA, LABEL_SMOOTHING_EPSILON,
+    COSINE_T_0, COSINE_T_MULT, GRAD_CLIP_MAX_NORM,
+    EARLY_STOPPING_PATIENCE, NUM_WORKERS,
+    CUTMIX_ALPHA, ONecycle_PCT_START
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -38,8 +40,7 @@ class FocalLoss(nn.Module):
         self.reduction = reduction
 
     def forward(self, inputs, targets):
-        ce_loss = F.cross_entropy(inputs, targets, weight=self.weight,
-                                   reduction='none')
+        ce_loss = F.cross_entropy(inputs, targets, weight=self.weight, reduction='none')
         pt = torch.exp(-ce_loss)
         focal_loss = ((1 - pt) ** self.gamma) * ce_loss
 
@@ -78,11 +79,12 @@ class LabelSmoothingCrossEntropy(nn.Module):
 class Trainer:
     """模型训练器"""
 
-    def __init__(self, model, device, model_name='model', use_mixup=False):
+    def __init__(self, model, device, model_name='model', use_mixup=False, use_cutmix=False):
         self.model = model.to(device)
         self.device = device
         self.model_name = model_name
         self.use_mixup = use_mixup
+        self.use_cutmix = use_cutmix
         self.train_losses = []
         self.val_losses = []
         self.train_accs = []
@@ -96,6 +98,11 @@ class Trainer:
         loss = lam * criterion(outputs, labels_a) + (1 - lam) * criterion(outputs, labels_b)
         return loss
 
+    def _compute_cutmix_loss(self, criterion, outputs, labels_a, labels_b, lam):
+        """计算 CutMix 的混合损失"""
+        loss = lam * criterion(outputs, labels_a) + (1 - lam) * criterion(outputs, labels_b)
+        return loss
+
     def train_epoch(self, train_loader, criterion, optimizer, epoch, num_epochs):
         """训练一个 epoch"""
         self.model.train()
@@ -103,23 +110,28 @@ class Trainer:
         correct = 0
         total = 0
 
-        pbar = tqdm(train_loader, desc=f'Epoch [{epoch+1}/{num_epochs}] Train')
+        pbar = tqdm(train_loader, desc=f'Epoch [{epoch + 1}/{num_epochs}] Train')
         for batch in pbar:
-            if self.use_mixup:
-                # MixUp 返回 5 个值: images, labels_a, labels_b, lam, paths
+            if self.use_cutmix or self.use_mixup:
+                # CutMix/MixUp 返回 5 个值：images, labels_a, labels_b, lam, paths
                 images, labels_a, labels_b, lam, _ = batch
                 images = images.to(self.device)
                 labels_a = labels_a.to(self.device)
                 labels_b = labels_b.to(self.device)
-                lam = lam.to(self.device) if isinstance(lam, torch.Tensor) else lam
+                if isinstance(lam, torch.Tensor):
+                    lam = lam.to(self.device)
             else:
                 images, labels, _ = batch
-                images, labels = images.to(self.device), labels.to(self.device)
+                images = images.to(self.device)
+                labels = labels.to(self.device)
+                lam = None
 
             # 前向传播
             outputs = self.model(images)
 
-            if self.use_mixup:
+            if self.use_cutmix:
+                loss = self._compute_cutmix_loss(criterion, outputs, labels_a, labels_b, lam)
+            elif self.use_mixup:
                 loss = self._compute_mixup_loss(criterion, outputs, labels_a, labels_b, lam)
             else:
                 loss = criterion(outputs, labels)
@@ -136,13 +148,19 @@ class Trainer:
             # 计算准确率
             total_loss += loss.item()
             _, predicted = torch.max(outputs.data, 1)
-            total += labels.size(0) if not self.use_mixup else labels_a.size(0)
-            if not self.use_mixup:
+
+            if self.use_cutmix or self.use_mixup:
+                # 对于 CutMix/MixUp，计算加权准确率
+                combined_labels = labels_a if lam > 0.5 else labels_b
+                correct += (predicted == combined_labels).sum().item()
+                total += combined_labels.size(0)
+            else:
                 correct += (predicted == labels).sum().item()
+                total += labels.size(0)
 
             pbar.set_postfix({'loss': loss.item()})
 
-        epoch_loss = total_loss / len(train_loader)
+        epoch_loss = total_loss / len(train_loader) if len(train_loader) > 0 else 0
         epoch_acc = correct / total if total > 0 else 0
 
         self.train_losses.append(epoch_loss)
@@ -150,18 +168,20 @@ class Trainer:
 
         return epoch_loss, epoch_acc
 
-    def validate(self, val_loader, criterion):
+    def validate(self, val_loader):
         """验证模型"""
         self.model.eval()
         total_loss = 0
         correct = 0
         total = 0
 
+        # 使用不带数据增强的验证损失函数
+        criterion = nn.CrossEntropyLoss()
+
         with torch.no_grad():
             pbar = tqdm(val_loader, desc='Validation')
             for images, labels, _ in pbar:
                 images, labels = images.to(self.device), labels.to(self.device)
-
                 outputs = self.model(images)
                 loss = criterion(outputs, labels)
 
@@ -172,8 +192,8 @@ class Trainer:
 
                 pbar.set_postfix({'loss': loss.item()})
 
-        epoch_loss = total_loss / len(val_loader)
-        epoch_acc = correct / total
+        epoch_loss = total_loss / len(val_loader) if len(val_loader) > 0 else 0
+        epoch_acc = correct / total if total > 0 else 0
 
         self.val_losses.append(epoch_loss)
         self.val_accs.append(epoch_acc)
@@ -182,7 +202,7 @@ class Trainer:
 
     def train(self, train_loader, val_loader, num_epochs=50, lr=0.001, weight_decay=1e-4,
               save_dir='models', use_focal=False, use_label_smoothing=False,
-              use_cosine=False):
+              use_cosine=False, use_onecycle=False):
         """完整训练流程
 
         Args:
@@ -195,16 +215,27 @@ class Trainer:
             use_focal: 是否使用 Focal Loss
             use_label_smoothing: 是否使用标签平滑
             use_cosine: 是否使用 CosineAnnealingWarmRestarts 调度器
+            use_onecycle: 是否使用 One Cycle 调度器
         """
-
         save_dir = Path(save_dir)
         save_dir.mkdir(parents=True, exist_ok=True)
 
         # 设置优化器
         optimizer = torch.optim.Adam(self.model.parameters(), lr=lr, weight_decay=weight_decay)
 
+        # v1.04: One Cycle 学习率调度器
+        if use_onecycle:
+            scheduler = torch.optim.lr_scheduler.OneCycleLR(
+                optimizer,
+                max_lr=lr,
+                epochs=num_epochs,
+                steps_per_epoch=len(train_loader),
+                pct_start=ONecycle_PCT_START,
+                anneal_strategy='cos'
+            )
+            logger.info(f"使用 OneCycleLR 调度器 (lr={lr}, pct_start={ONecycle_PCT_START})")
         # v1.03: CosineAnnealingWarmRestarts 调度器
-        if use_cosine:
+        elif use_cosine:
             scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
                 optimizer, T_0=COSINE_T_0, T_mult=COSINE_T_MULT
             )
@@ -221,6 +252,7 @@ class Trainer:
         n_classes = len(class_counts)
         class_weights = total_samples / (n_classes * class_counts.float())
         class_weights = class_weights.to(self.device)
+
         logger.info(f"类别权重：{class_weights.cpu().tolist()}")
 
         # v1.03: 选择损失函数
@@ -233,17 +265,23 @@ class Trainer:
         else:
             criterion = nn.CrossEntropyLoss(weight=class_weights)
 
-        # 在 MixUp 模式下，使用 KL 散度损失处理平滑标签
-        if self.use_mixup and not use_focal:
-            criterion = nn.KLDivLoss(reduction='batchmean') if use_label_smoothing else nn.CrossEntropyLoss(weight=class_weights)
+        # 在 MixUp/CutMix 模式下，使用 KL 散度损失处理平滑标签
+        if (self.use_mixup or self.use_cutmix) and not use_focal:
+            if use_label_smoothing:
+                criterion = nn.KLDivLoss(reduction='batchmean')
+            else:
+                criterion = nn.CrossEntropyLoss(weight=class_weights)
 
         logger.info(f"开始训练 {self.model_name}")
         logger.info(f"模型参数数量：{count_parameters(self.model):,}")
         logger.info(f"设备：{self.device}")
         logger.info(f"学习率：{lr}, 权重衰减：{weight_decay}")
         logger.info(f"总 Epoch 数：{num_epochs}")
+
         if self.use_mixup:
-            logger.info("MixUp 数据增强：已启用")
+            logger.info("MixUp 数据增强：启用")
+        if self.use_cutmix:
+            logger.info("CutMix 数据增强：启用")
 
         start_time = time.time()
         self.early_stop_counter = 0
@@ -255,10 +293,13 @@ class Trainer:
             )
 
             # 验证
-            val_loss, val_acc = self.validate(val_loader, criterion)
+            val_loss, val_acc = self.validate(val_loader)
 
             # 调整学习率
-            if use_cosine:
+            if use_onecycle:
+                scheduler.step()  # OneCycleLR 每个 batch 步进
+                current_lr = optimizer.param_groups[0]['lr']
+            elif use_cosine:
                 scheduler.step(epoch + 0.5)  # CosineAnnealingWarmRestarts 在 epoch 中间步进
                 current_lr = optimizer.param_groups[0]['lr']
             else:
@@ -266,7 +307,7 @@ class Trainer:
                 current_lr = optimizer.param_groups[0]['lr']
 
             logger.info(
-                f'Epoch [{epoch+1}/{num_epochs}] - '
+                f'Epoch [{epoch + 1}/{num_epochs}] - '
                 f'Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f} | '
                 f'Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f} | '
                 f'LR: {current_lr:.2e}'
@@ -277,6 +318,7 @@ class Trainer:
                 self.best_val_acc = val_acc
                 self.best_epoch = epoch
                 self.early_stop_counter = 0
+
                 best_model_path = save_dir / f'{self.model_name}_best.pth'
                 checkpoint = {
                     'model_state_dict': self.model.state_dict(),
@@ -288,7 +330,9 @@ class Trainer:
                     'use_focal': use_focal,
                     'use_label_smoothing': use_label_smoothing,
                     'use_cosine': use_cosine,
-                    'use_mixup': self.use_mixup
+                    'use_onecycle': use_onecycle,
+                    'use_mixup': self.use_mixup,
+                    'use_cutmix': self.use_cutmix
                 }
                 torch.save(checkpoint, best_model_path)
                 logger.info(f'已保存最好的模型：{best_model_path}')
@@ -298,13 +342,13 @@ class Trainer:
                 if self.early_stop_counter >= EARLY_STOPPING_PATIENCE:
                     logger.info(
                         f'Early Stopping: {EARLY_STOPPING_PATIENCE} 个 epoch 未改善，'
-                        f'停止训练 (最佳 epoch: {self.best_epoch+1}, 最佳 Val Acc: {self.best_val_acc:.4f})'
+                        f'停止训练 (最佳 epoch: {self.best_epoch + 1}, 最佳 Val Acc: {self.best_val_acc:.4f})'
                     )
                     break
 
         training_time = time.time() - start_time
         logger.info(f'训练完成，耗时：{training_time:.2f}s')
-        logger.info(f'最好的验证准确率：{self.best_val_acc:.4f} (Epoch {self.best_epoch+1})')
+        logger.info(f'最好的验证准确率：{self.best_val_acc:.4f} (Epoch {self.best_epoch + 1})')
 
         return {
             'best_val_acc': self.best_val_acc,
@@ -319,7 +363,9 @@ class Trainer:
 
 def train_baseline_models(data_dir, output_dir='models', num_epochs=50, batch_size=32,
                           num_workers=NUM_WORKERS, use_randaugment=False, use_mixup=False,
-                          use_focal=False, use_label_smoothing=False, use_cosine=False,
+                          use_cutmix=False, use_random_erasing=False,
+                          use_focal=False, use_label_smoothing=False,
+                          use_cosine=False, use_onecycle=False,
                           models_to_train=None):
     """训练模型
 
@@ -331,12 +377,14 @@ def train_baseline_models(data_dir, output_dir='models', num_epochs=50, batch_si
         num_workers: 工作进程数
         use_randaugment: 是否使用 RandAugment
         use_mixup: 是否使用 MixUp
+        use_cutmix: 是否使用 CutMix
+        use_random_erasing: 是否使用 RandomErasing
         use_focal: 是否使用 Focal Loss
         use_label_smoothing: 是否使用标签平滑
         use_cosine: 是否使用 CosineAnnealingWarmRestarts
+        use_onecycle: 是否使用 One Cycle 调度器
         models_to_train: 要训练的模型列表，默认为所有模型
     """
-
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -347,8 +395,13 @@ def train_baseline_models(data_dir, output_dir='models', num_epochs=50, batch_si
     # 创建数据加载器
     logger.info("加载数据...")
     train_loader, val_loader, test_loader = create_dataloaders(
-        data_dir, batch_size=batch_size, num_workers=num_workers,
-        use_randaugment=use_randaugment, use_mixup=use_mixup
+        data_dir,
+        batch_size=batch_size,
+        num_workers=num_workers,
+        use_randaugment=use_randaugment,
+        use_mixup=use_mixup or use_cutmix,  # CutMix 优先级高于 MixUp
+        use_cutmix=use_cutmix,
+        use_random_erasing=use_random_erasing
     )
 
     logger.info(f"训练集大小：{len(train_loader.dataset)}")
@@ -373,16 +426,15 @@ def train_baseline_models(data_dir, output_dir='models', num_epochs=50, batch_si
 
     for config in models_config:
         model_name = config['name']
-        logger.info(f"\n{'='*60}")
+        logger.info(f"\n{'=' * 60}")
         logger.info(f"训练模型：{model_name}")
-        logger.info(f"{'='*60}")
+        logger.info(f"{'=' * 60}")
 
         # 创建模型
-        model = create_model(model_name, num_classes=len(GARBAGE_CLASSES),
-                             pretrained=config['pretrained'])
+        model = create_model(model_name, num_classes=len(GARBAGE_CLASSES), pretrained=config['pretrained'])
 
         # 训练
-        trainer = Trainer(model, device, model_name, use_mixup=use_mixup)
+        trainer = Trainer(model, device, model_name, use_mixup=use_mixup, use_cutmix=use_cutmix)
         history = trainer.train(
             train_loader, val_loader,
             num_epochs=num_epochs,
@@ -391,7 +443,8 @@ def train_baseline_models(data_dir, output_dir='models', num_epochs=50, batch_si
             save_dir=output_dir,
             use_focal=use_focal,
             use_label_smoothing=use_label_smoothing,
-            use_cosine=use_cosine
+            use_cosine=use_cosine,
+            use_onecycle=use_onecycle
         )
 
         results[model_name] = history
@@ -413,6 +466,7 @@ def train_baseline_models(data_dir, output_dir='models', num_epochs=50, batch_si
 
     with open(history_path, 'w') as f:
         json.dump(serializable_results, f, indent=2)
+
     logger.info(f"训练历史已保存到：{history_path}")
 
     return results
@@ -420,9 +474,7 @@ def train_baseline_models(data_dir, output_dir='models', num_epochs=50, batch_si
 
 if __name__ == '__main__':
     import sys
-
     data_dir = sys.argv[1] if len(sys.argv) > 1 else 'data/processed'
     output_dir = sys.argv[2] if len(sys.argv) > 2 else 'models'
     num_epochs = int(sys.argv[3]) if len(sys.argv) > 3 else 50
-
     train_baseline_models(data_dir, output_dir, num_epochs)

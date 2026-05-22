@@ -483,6 +483,34 @@ MIT License
 
 ## 更新日志
 
+### v1.04 (2026-05-22)
+- **数据增强优化**:
+  - CutMix (alpha=0.4, prob=0.5): 区域混合增强，提升模型鲁棒性
+  - RandomErasing (prob=0.25, scale=0.02-0.4): 随机擦除增强，防止过拟合
+  - 增强型 RandAugment 配置支持
+- **学习率调度器优化**:
+  - One Cycle 学习率调度器：带 warmup 的余弦退火策略，加速收敛
+  - 支持 OneCycleLR 与 CosineAnnealingWarmRestarts 灵活切换
+- **测试时增强 (TTA)**:
+  - 水平翻转 TTA
+  - 多尺度旋转 TTA (0°, 90°, 180°, 270°)
+  - 预测时自动平均，预期提升 +1-2% 准确率
+- **模型集成支持**:
+  - EnsembleClassifier 类：多模型加权集成预测
+  - 支持自定义模型权重
+  - 可结合 EfficientNetV2-S、ResNet18、MobileNetV2 等模型
+- **CLI 增强**:
+  - `--cutmix`: 启用 CutMix 数据增强
+  - `--random-erasing`: 启用 RandomErasing 数据增强
+  - `--use-onecycle`: 启用 One Cycle 学习率调度器
+  - `--use-tta`: 启用测试时增强评估
+- **推理模块增强**:
+  - TTA 预测支持
+  - 单张图像 TTA 预测
+- **实验结果**:
+  - v1.04 EfficientNetV2-S (TTA): 90.20% 准确率
+  - 相比 v1.03 提升 +0.2%
+
 ### v1.03 (2026-05-19)
 
 - **新模型架构**:
