@@ -1,5 +1,4 @@
-"""
-数据加载和预处理模块
+""" 数据加载和预处理模块
 处理垃圾分类数据集的加载、清洗和增强
 """
 
@@ -8,7 +7,6 @@ import shutil
 import json
 import cv2
 import numpy as np
-import pandas as pd
 from pathlib import Path
 from PIL import Image
 from sklearn.model_selection import train_test_split
@@ -18,13 +16,15 @@ from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 import logging
 
-from src.config import (GARBAGE_CLASSES, CLASS_TO_IDX, IDX_TO_CLASS,
-                        TEST_SIZE, VAL_RATIO, RANDOM_SEED,
-                        RANDAUGMENT_NUM_OPS, RANDAUGMENT_MAGNITUDE,
-                        MIXUP_ALPHA)
+from src.config import (
+    GARBAGE_CLASSES, CLASS_TO_IDX, IDX_TO_CLASS,
+    TEST_SIZE, VAL_RATIO, RANDOM_SEED,
+    RANDAUGMENT_NUM_OPS, RANDAUGMENT_MAGNITUDE, MIXUP_ALPHA,
+    CUTMIX_ALPHA, CUTMIX_PROB,
+    RANDOM_ERASING_PROB, RANDOM_ERASING_SCALE, RANDOM_ERASING_RATIO
+)
 
 # 向后兼容的导入
-
 logger = logging.getLogger(__name__)
 
 
@@ -38,7 +38,6 @@ class DataCleaner:
     def load_dataset_info(self):
         """加载数据集信息，检查缺失和异常值"""
         logger.info("开始加载数据集信息...")
-
         dataset_info = {
             'total_images': 0,
             'class_distribution': {},
@@ -65,7 +64,7 @@ class DataCleaner:
 
         logger.info(f"数据集统计:")
         for cls, count in dataset_info['class_distribution'].items():
-            logger.info(f" {cls}: {count} 张")
+            logger.info(f"  {cls}: {count} 张")
 
         return dataset_info
 
@@ -92,8 +91,8 @@ class DataCleaner:
         """检测重复图像（基于文件大小和内容哈希）"""
         logger.info("检测重复文件...")
         duplicates = {}
-
         file_hashes = {}
+
         for cls in GARBAGE_CLASSES:
             cls_dir = self.data_dir / cls
             if not cls_dir.exists():
@@ -102,7 +101,6 @@ class DataCleaner:
             for img_path in cls_dir.glob('*.*'):
                 if img_path.is_file():
                     file_hash = self._compute_image_hash(img_path)
-
                     if file_hash in file_hashes:
                         if file_hash not in duplicates:
                             duplicates[file_hash] = [file_hashes[file_hash]]
@@ -142,7 +140,6 @@ class DataCleaner:
                     logger.info(f"已删除重复文件：{file_path}")
                 except Exception as e:
                     logger.error(f"删除文件失败：{file_path}, 错误：{e}")
-
         return removed_count
 
     def validate_labels(self):
@@ -190,14 +187,20 @@ def _get_or_create_split_indices(image_paths, labels, test_size=TEST_SIZE, val_s
 
     # 先分离出测试集
     temp_indices, test_indices, temp_labels, test_labels = train_test_split(
-        list(range(len(image_paths))), labels,
-        test_size=test_size, random_state=random_seed, stratify=labels
+        list(range(len(image_paths))),
+        labels,
+        test_size=test_size,
+        random_state=random_seed,
+        stratify=labels
     )
 
     # 再从临时集中分离验证集
     val_split = val_size / (1 - test_size)
     train_indices, val_indices = train_test_split(
-        temp_indices, test_size=val_split, random_state=random_seed, stratify=temp_labels
+        temp_indices,
+        test_size=val_split,
+        random_state=random_seed,
+        stratify=temp_labels
     )
 
     _dataset_split_cache = {
@@ -205,14 +208,14 @@ def _get_or_create_split_indices(image_paths, labels, test_size=TEST_SIZE, val_s
         'val': val_indices,
         'test': test_indices
     }
-
     return _dataset_split_cache
 
 
 class GarbageDataset(Dataset):
     """垃圾分类数据集"""
 
-    def __init__(self, data_dir, split='train', transform=None, test_size=TEST_SIZE, val_size=VAL_RATIO, random_seed=RANDOM_SEED):
+    def __init__(self, data_dir, split='train', transform=None,
+                 test_size=TEST_SIZE, val_size=VAL_RATIO, random_seed=RANDOM_SEED):
         """
         初始化数据集
 
@@ -250,7 +253,9 @@ class GarbageDataset(Dataset):
         # 使用固定随机种子确保划分一致性
         split_indices = _get_or_create_split_indices(
             self.images, self.labels,
-            test_size=test_size, val_size=val_size, random_seed=random_seed
+            test_size=test_size,
+            val_size=val_size,
+            random_seed=random_seed
         )
 
         # 根据划分索引获取对应的图像
@@ -292,16 +297,143 @@ class GarbageDataset(Dataset):
         return image, label, img_path
 
 
-def get_transforms(use_randaugment=False):
+class RandomErasing:
+    """v1.04: RandomErasing 数据增强"""
+
+    def __init__(self, p=RANDOM_ERASING_PROB, scale=RANDOM_ERASING_SCALE,
+                 ratio=RANDOM_ERASING_RATIO, value=None, inplace=False):
+        self.p = p
+        self.scale = scale
+        self.ratio = ratio
+        self.value = value
+        self.inplace = inplace
+
+    def __call__(self, img):
+        """
+        Args:
+            img: PIL Image 或 Tensor
+        """
+        if torch.rand(1).item() > self.p:
+            return img
+
+        if not isinstance(img, torch.Tensor):
+            img = transforms.ToTensor()(img)
+
+        c, h, w = img.shape
+        area = h * w
+
+        for _ in range(10):
+            target_area = area * torch.empty(1).uniform_(self.scale[0], self.scale[1]).item()
+            log_ratio = torch.log(torch.tensor(self.ratio))
+            aspect_ratio = torch.exp(
+                torch.empty(1).uniform_(log_ratio[0], log_ratio[1])
+            ).item()
+
+            w_ = int(torch.sqrt(target_area * aspect_ratio).round())
+            h_ = int(torch.sqrt(target_area / aspect_ratio).round())
+
+            if w_ <= w and h_ <= h:
+                x = torch.randint(0, h - h_ + 1, size=(1,)).item()
+                y = torch.randint(0, w - w_ + 1, size=(1,)).item()
+
+                if not self.inplace:
+                    img = img.clone()
+
+                if self.value is None:
+                    v = torch.empty(c, 1, 1, device=img.device).normal_()
+                else:
+                    v = torch.tensor(self.value).view(c, 1, 1)
+
+                img[:, x:x + h_, y:y + w_] = v
+                return img
+
+        return img
+
+
+class CutMixCollate:
+    """v1.04: CutMix 批量合成样本"""
+
+    def __init__(self, alpha=CUTMIX_ALPHA, prob=CUTMIX_PROB):
+        self.alpha = alpha
+        self.prob = prob
+
+    def __call__(self, batch):
+        images, labels, paths = zip(*batch)
+        images = torch.stack(images, 0)
+        labels = torch.tensor(labels)
+        paths = list(paths)
+
+        # 按概率应用 CutMix
+        if torch.rand(1).item() < self.prob and self.alpha > 0:
+            lam = np.random.beta(self.alpha, self.alpha)
+            batch_size = images.size(0)
+            index = torch.randperm(batch_size)
+
+            # 生成 CutMix 区域
+            W = images.shape[2]
+            H = images.shape[3]
+            cut_rat = np.sqrt(1. - lam)
+            cut_w = int(W * cut_rat)
+            cut_h = int(H * cut_rat)
+
+            # 随机选择裁剪中心
+            cx = np.random.randint(W)
+            cy = np.random.randint(H)
+
+            x = np.clip(cx - cut_w // 2, 0, W)
+            y = np.clip(cy - cut_h // 2, 0, H)
+
+            # 计算实际裁剪区域
+            x1, y1 = x, y
+            x2, y2 = min(x + cut_w, W), min(y + cut_h, H)
+
+            # 应用 CutMix
+            images[:, :, y1:y2, x1:x2] = images[index][:, :, y1:y2, x1:x2]
+            labels_a = labels
+            labels_b = labels[index]
+
+            # 调整 lam 以匹配实际裁剪区域
+            lam = 1 - ((x2 - x1) * (y2 - y1) / (W * H))
+
+            return images, labels_a, labels_b, lam, paths
+
+        return images, labels, paths
+
+
+class MixUpCollate:
+    """v1.03: MixUp 批量合成样本"""
+
+    def __init__(self, alpha=MIXUP_ALPHA):
+        self.alpha = alpha
+
+    def __call__(self, batch):
+        images, labels, paths = zip(*batch)
+        images = torch.stack(images, 0)
+        labels = torch.tensor(labels)
+        paths = list(paths)
+
+        if self.alpha > 0:
+            lam = np.random.beta(self.alpha, self.alpha)
+            batch_size = images.size(0)
+            index = torch.randperm(batch_size)
+            mixed_images = lam * images + (1 - lam) * images[index, :]
+            labels_a, labels_b = labels, labels[index]
+            return mixed_images, labels_a, labels_b, lam, paths
+
+        return images, labels, paths
+
+
+def get_transforms(use_randaugment=False, use_cutmix=False, use_random_erasing=False):
     """获取数据增强变换
 
     Args:
         use_randaugment: 是否使用 RandAugment 增强
+        use_cutmix: 是否使用 CutMix（在 collate 中应用）
+        use_random_erasing: 是否使用 RandomErasing
 
     Returns:
         train_transform, val_test_transform
     """
-
     # 基础增强
     augmentations = [
         transforms.Resize((224, 224)),
@@ -322,7 +454,11 @@ def get_transforms(use_randaugment=False):
             )
             augmentations.insert(1, randaugment)
         except Exception as e:
-            logger.warning(f"RandAugment 不可用，跳过: {e}")
+            logger.warning(f"RandAugment 不可用，跳过：{e}")
+
+    # v1.04: RandomErasing 在 ToTensor 之后应用
+    if use_random_erasing:
+        augmentations.append(RandomErasing())
 
     train_transform = transforms.Compose(augmentations + [
         transforms.ToTensor(),
@@ -345,33 +481,9 @@ def get_transforms(use_randaugment=False):
     return train_transform, val_test_transform
 
 
-class MixUpCollate:
-    """v1.03: MixUp 批量合成样本"""
-
-    def __init__(self, alpha=MIXUP_ALPHA):
-        self.alpha = alpha
-
-    def __call__(self, batch):
-        images, labels, paths = zip(*batch)
-        images = torch.stack(images, 0)
-        labels = torch.tensor(labels)
-        paths = list(paths)
-
-        if self.alpha > 0:
-            lam = np.random.beta(self.alpha, self.alpha)
-            batch_size = images.size(0)
-            index = torch.randperm(batch_size)
-
-            mixed_images = lam * images + (1 - lam) * images[index, :]
-            labels_a, labels_b = labels, labels[index]
-
-            return mixed_images, labels_a, labels_b, lam, paths
-
-        return images, labels, paths
-
-
 def create_dataloaders(data_dir, batch_size=32, num_workers=4,
-                       use_randaugment=False, use_mixup=False):
+                       use_randaugment=False, use_mixup=False,
+                       use_cutmix=False, use_random_erasing=False):
     """创建数据加载器
 
     Args:
@@ -380,28 +492,52 @@ def create_dataloaders(data_dir, batch_size=32, num_workers=4,
         num_workers: 工作进程数
         use_randaugment: 是否使用 RandAugment
         use_mixup: 是否使用 MixUp
+        use_cutmix: 是否使用 CutMix
+        use_random_erasing: 是否使用 RandomErasing
 
     Returns:
         train_loader, val_loader, test_loader
     """
-    train_transform, val_test_transform = get_transforms(use_randaugment=use_randaugment)
+    train_transform, val_test_transform = get_transforms(
+        use_randaugment=use_randaugment,
+        use_cutmix=use_cutmix,
+        use_random_erasing=use_random_erasing
+    )
 
     train_dataset = GarbageDataset(data_dir, split='train', transform=train_transform)
     val_dataset = GarbageDataset(data_dir, split='val', transform=val_test_transform)
     test_dataset = GarbageDataset(data_dir, split='test', transform=val_test_transform)
 
-    # v1.03: MixUp collate 函数
-    collate_fn = MixUpCollate() if use_mixup else None
+    # v1.04: 选择 collate 函数（CutMix 优先级高于 MixUp）
+    if use_cutmix:
+        collate_fn = CutMixCollate()
+        logger.info("使用 CutMix 数据增强")
+    elif use_mixup:
+        collate_fn = MixUpCollate()
+        logger.info("使用 MixUp 数据增强")
+    else:
+        collate_fn = None
 
     train_loader = DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=True,
-        num_workers=num_workers, collate_fn=collate_fn
+        train_dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=num_workers,
+        collate_fn=collate_fn
     )
+
     val_loader = DataLoader(
-        val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers
+        val_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers
     )
+
     test_loader = DataLoader(
-        test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers
+        test_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers
     )
 
     return train_loader, val_loader, test_loader
