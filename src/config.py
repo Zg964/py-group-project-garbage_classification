@@ -16,9 +16,9 @@ CLASS_NAMES = GARBAGE_CLASSES  # 别名
 CLASS_TO_IDX = {cls: idx for idx, cls in enumerate(GARBAGE_CLASSES)}
 IDX_TO_CLASS = {idx: cls for idx, cls in CLASS_TO_IDX.items()}
 
-# 训练相关
+# v1.06: 更新训练轮数和早停耐心值
 DEFAULT_BATCH_SIZE = 32
-DEFAULT_NUM_EPOCHS = 50
+DEFAULT_NUM_EPOCHS = 150
 DEFAULT_LEARNING_RATE = 0.001
 DEFAULT_WEIGHT_DECAY = 1e-4
 NUM_WORKERS = 0
@@ -29,7 +29,7 @@ LABEL_SMOOTHING_EPSILON = 0.1  # 标签平滑系数
 COSINE_T_0 = 10  # CosineAnnealingWarmRestarts 初始周期
 COSINE_T_MULT = 2  # 周期增长倍数
 GRAD_CLIP_MAX_NORM = 1.0  # 梯度裁剪最大范数
-EARLY_STOPPING_PATIENCE = 10  # Early Stopping 耐心值
+EARLY_STOPPING_PATIENCE = 30  # v1.06: 从 10 增加到 30
 
 # v1.03 数据增强参数
 RANDAUGMENT_NUM_OPS = 2  # RandAugment 操作数量
@@ -47,6 +47,28 @@ RANDOM_ERASING_RATIO = (0.3, 3.3)  # RandomErasing 宽高比
 ONecycle_TOTAL_STEPS = None  # One Cycle 总步数（训练时动态设置）
 ONecycle_PCT_START = 0.3  # One Cycle 上升阶段比例
 ONecycle_ANNEAL_STRATEGY = 'cos'  # One Cycle 退火策略
+
+# v1.06: Cosine Warmup 调度器参数
+WARMUP_EPOCHS = 5  # Warmup epoch 数
+COSINE_ETA_MIN = 1e-6  # CosineAnnealingLR 最小学习率
+
+# v1.06: SGD 优化器参数
+SGD_LR = 0.01
+SGD_MOMENTUM = 0.9
+SGD_WEIGHT_DECAY = 1e-4
+
+# v1.06: SWA (Stochastic Weight Averaging) 参数
+SWA_START_FRACTION = 0.75  # 在最后 25% epoch 启动 SWA
+SWA_LR_FACTOR = 0.1  # SWA 学习率为原 LR 的倍数
+
+# v1.05 模型专属训练超参数
+# ConvNeXt Tiny 专用配置
+CONVNEXT_LR = 1e-4
+CONVNEXT_WEIGHT_DECAY = 0.05
+CONVNEXT_GRAD_CLIP = 5.0
+# 预训练模型微调专用配置
+PRETRAINED_LR = 5e-5
+PRETRAINED_WEIGHT_DECAY = 1e-4
 
 # v1.04 TTA 参数
 TTA_ENABLED = False  # 是否启用 TTA

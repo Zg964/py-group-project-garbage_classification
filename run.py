@@ -2,6 +2,7 @@
 执行完整的数据清洗、模型训练和评估流程
 v1.03: 新增模型选择、RandAugment、MixUp、Focal Loss 等训练选项
 v1.04: 新增 CutMix、RandomErasing、One Cycle 调度器、TTA、模型集成支持
+v1.06: 新增 Cosine Warmup 调度器、加权采样、SWA、EfficientNetV2-M、ConvNeXt Small
 """
 
 import sys
@@ -25,7 +26,7 @@ logger = logging.getLogger(__name__)
 def main():
     """主函数"""
     parser = argparse.ArgumentParser(
-        description='智能垃圾分类系统 - 数据清洗和模型训练 (v1.04)'
+        description='智能垃圾分类系统 - 数据清洗和模型训练 (v1.06)'
     )
     parser.add_argument(
         '--data-dir',
@@ -42,7 +43,7 @@ def main():
     parser.add_argument(
         '--epochs',
         type=int,
-        default=50,
+        default=150,
         help='训练轮数'
     )
     parser.add_argument(
@@ -59,11 +60,14 @@ def main():
         help='执行的任务'
     )
     # v1.03: 模型选择
+    # v1.06: 新增 efficientnetv2m, convnextsmall
     parser.add_argument(
         '--models',
         type=str,
         nargs='+',
-        choices=['simple_cnn', 'mobilenetv2', 'resnet18', 'efficientnetv2s', 'convnexttiny'],
+        choices=['simple_cnn', 'simple_cnn_v2', 'mobilenetv2', 'mobilenetv2_se',
+                 'resnet18', 'resnet50', 'efficientnetv2s', 'efficientnetv2m',
+                 'convnexttiny', 'convnextsmall'],
         help='要训练/评估的模型（默认全部）'
     )
     # v1.03: 数据增强选项
@@ -102,13 +106,42 @@ def main():
     parser.add_argument(
         '--use-cosine',
         action='store_true',
-        help='启用 CosineAnnealingWarmRestarts 调度器'
+        help='启用 CosineAnnealingWarmRestarts 调度器（v1.06 弃用，推荐 --use-warmup）'
     )
     # v1.04: One Cycle 调度器
     parser.add_argument(
         '--use-onecycle',
         action='store_true',
         help='启用 One Cycle 学习率调度器'
+    )
+    # v1.06: Cosine Warmup 调度器
+    parser.add_argument(
+        '--use-warmup',
+        action='store_true',
+        help='v1.06: 启用 Cosine Warmup + CosineAnnealingLR 调度器'
+    )
+    # v1.06: 类别平衡采样
+    parser.add_argument(
+        '--use-weighted-sampler',
+        action='store_true',
+        help='v1.06: 启用 WeightedRandomSampler 类别平衡采样'
+    )
+    # v1.06: SWA
+    parser.add_argument(
+        '--use-swa',
+        action='store_true',
+        help='v1.06: 启用 Stochastic Weight Averaging'
+    )
+    # v1.05: EMA 和知识蒸馏
+    parser.add_argument(
+        '--use-ema',
+        action='store_true',
+        help='启用指数移动平均 (EMA)'
+    )
+    parser.add_argument(
+        '--use-distill',
+        action='store_true',
+        help='启用知识蒸馏（Teacher: EfficientNetV2-S）'
     )
     # v1.04: TTA 选项
     parser.add_argument(
@@ -122,10 +155,13 @@ def main():
         type=str,
         help='推理模式下的图像路径'
     )
+    # v1.06: 新增模型名选项
     parser.add_argument(
         '--model-name',
         type=str,
-        choices=['simple_cnn', 'mobilenetv2', 'resnet18', 'efficientnetv2s', 'convnexttiny'],
+        choices=['simple_cnn', 'simple_cnn_v2', 'mobilenetv2', 'mobilenetv2_se',
+                 'resnet18', 'resnet50', 'efficientnetv2s', 'efficientnetv2m',
+                 'convnexttiny', 'convnextsmall'],
         default='efficientnetv2s',
         help='推理使用的模型'
     )
@@ -133,7 +169,7 @@ def main():
     args = parser.parse_args()
 
     logger.info("=" * 80)
-    logger.info("智能垃圾分类系统 - v1.04 优化阶段")
+    logger.info("智能垃圾分类系统 - v1.06 极致精度优化")
     logger.info("=" * 80)
     logger.info(f"启动时间：{datetime.now()}")
     logger.info(f"数据目录：{args.data_dir}")
@@ -149,6 +185,11 @@ def main():
         logger.info(f"标签平滑：{'启用' if args.use_label_smoothing else '禁用'}")
         logger.info(f"CosineAnnealing: {'启用' if args.use_cosine else '禁用'}")
         logger.info(f"One Cycle: {'启用' if args.use_onecycle else '禁用'}")
+        logger.info(f"Warmup+Cosine: {'启用' if args.use_warmup else '禁用'}")
+        logger.info(f"加权采样: {'启用' if args.use_weighted_sampler else '禁用'}")
+        logger.info(f"SWA: {'启用' if args.use_swa else '禁用'}")
+        logger.info(f"EMA: {'启用' if args.use_ema else '禁用'}")
+        logger.info(f"知识蒸馏: {'启用' if args.use_distill else '禁用'}")
 
     try:
         if args.task in ['clean', 'all']:
@@ -179,7 +220,12 @@ def main():
                 use_label_smoothing=args.use_label_smoothing,
                 use_cosine=args.use_cosine,
                 use_onecycle=args.use_onecycle,
-                models_to_train=args.models
+                use_warmup=args.use_warmup,
+                models_to_train=args.models,
+                use_ema=args.use_ema,
+                use_distill=args.use_distill,
+                use_weighted_sampler=args.use_weighted_sampler,
+                use_swa=args.use_swa
             )
             logger.info("✓ 模型训练完成")
 
@@ -193,7 +239,7 @@ def main():
                 models_dir='models',
                 output_dir='logs',
                 models_to_evaluate=args.models,
-                use_tta=args.use_tta
+                use_tta=args.use_tta if args.use_tta else True  # v1.06: 默认启用 TTA
             )
             logger.info("✓ 模型评估完成")
 

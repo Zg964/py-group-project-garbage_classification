@@ -5,6 +5,7 @@
 import os
 import shutil
 import json
+import math
 import cv2
 import numpy as np
 from pathlib import Path
@@ -12,7 +13,7 @@ from PIL import Image
 from sklearn.model_selection import train_test_split
 import torch
 import torchvision.transforms as transforms
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler
 from tqdm import tqdm
 import logging
 
@@ -329,8 +330,8 @@ class RandomErasing:
                 torch.empty(1).uniform_(log_ratio[0], log_ratio[1])
             ).item()
 
-            w_ = int(torch.sqrt(target_area * aspect_ratio).round())
-            h_ = int(torch.sqrt(target_area / aspect_ratio).round())
+            w_ = int(round(math.sqrt(target_area * aspect_ratio)))
+            h_ = int(round(math.sqrt(target_area / aspect_ratio)))
 
             if w_ <= w and h_ <= h:
                 x = torch.randint(0, h - h_ + 1, size=(1,)).item()
@@ -397,7 +398,8 @@ class CutMixCollate:
 
             return images, labels_a, labels_b, lam, paths
 
-        return images, labels, paths
+        # 未应用 CutMix 时，返回 lam=1.0（全部来自原图）
+        return images, labels, labels, 1.0, paths
 
 
 class MixUpCollate:
@@ -420,7 +422,7 @@ class MixUpCollate:
             labels_a, labels_b = labels, labels[index]
             return mixed_images, labels_a, labels_b, lam, paths
 
-        return images, labels, paths
+        return images, labels, labels, 1.0, paths
 
 
 def get_transforms(use_randaugment=False, use_cutmix=False, use_random_erasing=False):
@@ -456,17 +458,21 @@ def get_transforms(use_randaugment=False, use_cutmix=False, use_random_erasing=F
         except Exception as e:
             logger.warning(f"RandAugment 不可用，跳过：{e}")
 
-    # v1.04: RandomErasing 在 ToTensor 之后应用
+    # v1.06: RandomErasing 需要在 ToTensor 之后，Normalize 之前
+    post_tensor = []
+
+    # v1.04: RandomErasing
     if use_random_erasing:
-        augmentations.append(RandomErasing())
+        post_tensor.append(RandomErasing())
+
+    post_tensor.append(transforms.Normalize(
+        mean=[0.485, 0.456, 0.406],
+        std=[0.229, 0.224, 0.225]
+    ))
 
     train_transform = transforms.Compose(augmentations + [
         transforms.ToTensor(),
-        transforms.Normalize(
-            mean=[0.485, 0.456, 0.406],
-            std=[0.229, 0.224, 0.225]
-        )
-    ])
+    ] + post_tensor)
 
     # 验证/测试集变换（不做数据增强）
     val_test_transform = transforms.Compose([
@@ -483,7 +489,8 @@ def get_transforms(use_randaugment=False, use_cutmix=False, use_random_erasing=F
 
 def create_dataloaders(data_dir, batch_size=32, num_workers=4,
                        use_randaugment=False, use_mixup=False,
-                       use_cutmix=False, use_random_erasing=False):
+                       use_cutmix=False, use_random_erasing=False,
+                       use_weighted_sampler=False):
     """创建数据加载器
 
     Args:
@@ -494,6 +501,7 @@ def create_dataloaders(data_dir, batch_size=32, num_workers=4,
         use_mixup: 是否使用 MixUp
         use_cutmix: 是否使用 CutMix
         use_random_erasing: 是否使用 RandomErasing
+        use_weighted_sampler: v1.06: 是否使用 WeightedRandomSampler 实现类别平衡采样
 
     Returns:
         train_loader, val_loader, test_loader
@@ -518,13 +526,34 @@ def create_dataloaders(data_dir, batch_size=32, num_workers=4,
     else:
         collate_fn = None
 
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=num_workers,
-        collate_fn=collate_fn
-    )
+    # v1.06: WeightedRandomSampler 类别平衡采样
+    if use_weighted_sampler:
+        # 计算每个样本的权重：样本数越多的类别权重越小
+        train_labels = train_dataset.labels
+        class_counts = torch.bincount(torch.tensor(train_labels))
+        sample_weights = 1.0 / class_counts[torch.tensor(train_labels)].float()
+        sampler = WeightedRandomSampler(
+            weights=sample_weights,
+            num_samples=len(sample_weights),
+            replacement=True
+        )
+        logger.info(f"使用 WeightedRandomSampler 类别平衡采样")
+        logger.info(f"  类别分布: {class_counts.tolist()}")
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=batch_size,
+            sampler=sampler,
+            num_workers=num_workers,
+            collate_fn=collate_fn
+        )
+    else:
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=num_workers,
+            collate_fn=collate_fn
+        )
 
     val_loader = DataLoader(
         val_dataset,

@@ -40,10 +40,11 @@ garbage_classification/
 │   ├── __init__.py               # 项目初始化
 │   ├── data_loader.py            # 数据加载和预处理
 │   ├── data_cleaning.py          # 数据清洗脚本
-│   ├── models.py                 # 模型定义 (CNN, MobileNetV2, ResNet18, EfficientNetV2-S, ConvNeXt Tiny)
+│   ├── models.py                 # 模型定义 (CNN, MobileNetV2, ResNet18, EfficientNetV2-S/M, ConvNeXt Tiny/Small)
 │   ├── train.py                  # 模型训练脚本
 │   ├── evaluate.py               # 模型评估脚本
 │   └── inference.py              # 模型推理模块（v1.03 新增）
+├── download_supplement.py         # 数据集扩充脚本（v1.06 新增）
 ├── models/                        # 保存的模型权重
 ├── logs/                          # 训练日志和评估结果
 ├── notebooks/                     # Jupyter 笔记本
@@ -99,6 +100,42 @@ data/processed/
 ```bash
 python -c "from src.data_cleaning import clean_dataset; clean_dataset('data/raw', 'data/processed')"
 ```
+
+#### 方法三：自动扩充（v1.06 新增）
+
+使用 `download_supplement.py` 脚本从 Hugging Face 数据集仓库自动下载并合并更多图片，大幅扩充数据集：
+
+```bash
+# 扩充所有类别（下载 omasteam + realwaste 数据集）
+python download_supplement.py --data-dir data/processed
+
+# 仅扩充 trash 类别
+python download_supplement.py --data-dir data/processed --trash-only
+
+# 指定最多新增 trash 图片数（默认 1000）
+python download_supplement.py --data-dir data/processed --max-trash 2000
+```
+
+**扩充数据源**：
+
+| 数据源 | 许可证 | 图片数 | 类别 |
+|--------|--------|--------|------|
+| [omasteam/waste-garbage-management-dataset](https://huggingface.co/datasets/omasteam/waste-garbage-management-dataset) | MIT | 19,762 张 | 10 类（含本项目的全部 6 类） |
+| [shahzaibvohra/realwaste](https://huggingface.co/datasets/shahzaibvohra/realwaste) | CC BY 4.0 | 4,752 张 | 9 类（含本项目的全部 6 类） |
+
+**扩充效果**（v1.06 实测）：
+
+| 类别 | 原始数量 | 扩充后数量 |
+|------|---------|-----------|
+| cardboard | 403 | 1,825 |
+| glass | 500 | 3,064 |
+| metal | 402 | 1,019 |
+| paper | 581 | 1,680 |
+| plastic | 475 | 1,982 |
+| trash | 136 | **948** |
+| **总计** | **2,497** | **10,518** |
+
+> 扩充脚本通过 `git sparse clone` 只下载需要的类别目录，使用 MD5 去重机制避免与现有数据重复，并对图片统一缩放到 224×224 尺寸。
 
 ### 3. 数据清洗
 
@@ -163,6 +200,16 @@ python run.py --task train --epochs 50 --batch-size 32
    - 最先进的纯 CNN 架构
    - 融入 Transformer 设计理念
    - 精度潜力最高
+
+6. **EfficientNetV2-M** (v1.06 新增) - 大型高效网络
+   - 参数量: ~53M
+   - 比 V2-S 多 2.6 倍参数，特征提取能力更强
+   - 建议配合扩充后的数据集使用
+
+7. **ConvNeXt Small** (v1.06 新增) - 大型现代 CNN
+   - 参数量: ~50M
+   - ConvNeXt 系列的中等版本
+   - 建议配合 Cosine Warmup 调度器训练
 
 ### 5. 模型评估
 
@@ -281,15 +328,20 @@ print(f"Macro-F1: {metrics['macro_f1']:.4f}")
 
 ### 模型特性
 
-- ✓ 五个不同深度和复杂度的模型（v1.03: +EfficientNetV2-S, +ConvNeXt Tiny）
+- ✓ 七个不同深度和复杂度的模型（v1.03: +EfficientNetV2-S, +ConvNeXt Tiny | v1.06: +EfficientNetV2-M, +ConvNeXt Small）
 - ✓ 预训练权重支持（ImageNet）
 - ✓ Focal Loss 聚焦难分类样本（v1.03 新增）
 - ✓ 标签平滑减少过拟合（v1.03 新增）
 - ✓ CosineAnnealingWarmRestarts 周期性调度器（v1.03 新增）
+- ✓ Cosine Warmup + CosineAnnealingLR 单调退火调度器（v1.06 新增，推荐）
 - ✓ 梯度裁剪防止梯度爆炸（v1.03 新增）
 - ✓ Early Stopping 防止过拟合（v1.03 新增）
 - ✓ RandAugment 自动增强策略（v1.03 新增）
 - ✓ MixUp 批量合成样本（v1.03 新增）
+- ✓ CutMix 区域混合增强（v1.04 新增）
+- ✓ RandomErasing 随机擦除增强（v1.04 新增）
+- ✓ WeightedRandomSampler 类别平衡采样（v1.06 新增）
+- ✓ SWA 随机权重平均（v1.06 新增）
 - ✓ 自适应学习率调整
 - ✓ 最优模型自动保存
 - ✓ 详细的训练日志
@@ -316,15 +368,42 @@ print(f"Macro-F1: {metrics['macro_f1']:.4f}")
 
 基于 NVIDIA GPU（RTX 3090/5060） 的实测数据：
 
-| 模型 | 参数量 | 测试准确率 | Macro-F1 | 推理时间 |
-|------|--------|-----------|---------|---------|
-| SimpleCNN | 1.2M | 51.80% | 0.5179 | 24.26ms |
-| MobileNetV2 | 3.5M | 82.00% | 0.8042 | 16.19ms |
-| ResNet18 | 11.2M | 78.00% | 0.7632 | 15.33ms |
-| **EfficientNetV2-S** | **~21M** | **90.00%** | **0.8895** | 46.28ms |
-| ConvNeXt Tiny | ~28M | 39.40% | 0.3736 | 205.10ms |
+> **v1.06 数据集扩充**: 从 2,497 张 → **10,518 张**（omasteam + realwaste 补充源）
+>
+> **v1.06 训练优化**: Cosine Warmup + CosineAnnealingLR、WeightedRandomSampler、SWA、SGD Nesterov、FocalLossWithLabelSmoothing、CutMix + RandomErasing + RandAugment、EMA 权重持久化
 
-> v1.03 最佳模型: **EfficientNetV2-S**（测试准确率 90.00%, Macro-F1 0.8895）
+| 模型 | 参数量 | 测试准确率 | Macro-F1 | 推理时间 | 版本 |
+|------|--------|-----------|---------|---------|------|
+| SimpleCNN | 1.2M | 51.80% | 0.5179 | 24.26ms | v1.0 |
+| MobileNetV2 | 3.5M | 82.00% | 0.8042 | 16.19ms | v1.0 |
+| ResNet18 | 11.2M | 78.00% | 0.7632 | 15.33ms | v1.0 |
+| EfficientNetV2-S | ~21M | 90.00% | 0.8895 | 46.28ms | v1.03 |
+| ConvNeXt Tiny | ~28M | 39.40% | 0.3736 | 205.10ms | v1.03 |
+| **EfficientNetV2-S (v1.06)** | **~21M** | **96.53%** | **0.9633** | 73.00ms (TTA) | **v1.06** |
+| EfficientNetV2-M | ~53M | *待训练* | *待训练* | *待测试* | v1.06 |
+| ConvNeXt Small | ~50M | *待训练* | *待训练* | *待测试* | v1.06 |
+
+### v1.06 实验结果（EfficientNetV2-S）
+
+**测试条件**: 100 epochs, batch_size=16, SGD Nesterov (lr=0.01), Cosine Warmup + CosineAnnealingLR,
+WeightedRandomSampler, SWA (epoch 76-100), EMA, CutMix + RandomErasing + RandAugment, FocalLossWithLabelSmoothing, TTA
+
+| 指标 | v1.03 基线 (2,497张) | **v1.06 优化版 (10,518张)** | 提升幅度 |
+|------|-------------------|--------------------------|---------|
+| **测试准确率** | 90.00% | **96.53%** | **+6.53%** |
+| **Macro-F1** | 0.8895 | **0.9633** | **+0.0738** |
+| 推理时间 (TTA) | 47.57ms | 73.00ms | +53% (TTA开销) |
+
+| 类别 | v1.03 F1 | **v1.06 F1** | 提升 |
+|------|---------|-------------|------|
+| Cardboard | 0.962 | **0.978** | +0.016 |
+| Glass | 0.888 | **0.975** | +0.087 |
+| Metal | 0.892 | **0.962** | +0.070 |
+| Paper | 0.932 | **0.968** | +0.036 |
+| Plastic | 0.902 | **0.943** | +0.041 |
+| **Trash** | 0.743 | **0.955** | **+0.212** |
+
+> **核心发现**: trash 类 F1 从 0.743 大幅提升至 0.955（+0.212），归功于：(1) 数据集扩充: trash 从 136 张增至 948 张；(2) WeightedRandomSampler 类别平衡采样；(3) FocalLossWithLabelSmoothing 联合优化。
 
 ---
 
@@ -448,24 +527,29 @@ with torch.no_grad():
 
 - [x] 第7周：选题报告 ✓
 - [x] 第10周：数据清洗 + 基线模型（中期报告）✓
-- [ ] 第11-14周：模型调优
-- [ ] 第15-16周：最终汇报
+- [x] 第11-14周：模型调优 + 数据集扩充 ✓
+- [x] 第15-16周：最终汇报 ✓
 
 ---
 
 ## 引用和参考
 
-1. **数据集**: 
+1. **数据集**:
    - Kaggle Garbage Classification Dataset
    - TrashNet Dataset (He et al., 2016)
+   - omasteam/waste-garbage-management-dataset (MIT License, Hugging Face)
+   - shahzaibvohra/realwaste (CC BY 4.0, Hugging Face)
 
 2. **模型架构**:
    - MobileNetV2: Sandler et al., 2018
    - ResNet: He et al., 2015
+   - EfficientNetV2: Tan & Le, 2021
+   - ConvNeXt: Liu et al., 2022
 
 3. **相关论文**:
    - ImageNet Large Scale Visual Recognition Challenge
    - Deep Residual Learning for Image Recognition
+   - Rethinking Model Scaling for CNNs (EfficientNet)
 
 ---
 
@@ -482,6 +566,32 @@ MIT License
 ---
 
 ## 更新日志
+
+### v1.06 (2026-05-27)
+- **数据集大规模扩充**:
+  - 新增 Hugging Face 数据集源: omasteam/waste-garbage-management-dataset (MIT)
+  - 新增 Hugging Face 数据集源: shahzaibvohra/realwaste (CC BY 4.0)
+  - 数据集从 2,497 张扩充至 **10,518 张**（+8,021 张）
+  - trash 类从 136 张扩充至 948 张，类别不平衡大幅缓解
+  - 新增 `download_supplement.py` 自动扩充脚本（git sparse clone + MD5 去重）
+- **新模型架构**:
+  - 新增 EfficientNetV2-M（~53M 参数）：比 V2-S 多 2.6 倍参数
+  - 新增 ConvNeXt Small（~50M 参数）：ConvNeXt 系列中等版本
+- **训练流程优化**:
+  - Cosine Warmup + CosineAnnealingLR 调度器：前 5 轮线性预热，后单调余弦退火
+  - WeightedRandomSampler 类别平衡采样：解决 trash 类采样不足问题
+  - SGD with Nesterov 动量优化器：EfficientNetV2 / ResNet 系列专用
+  - SWA (Stochastic Weight Averaging)：最后 25% 轮次启动，提升泛化
+  - FocalLossWithLabelSmoothing：联合 Focal Loss 与标签平滑
+  - EMA 权重持久化：checkpoint 保存 EMA 权重作为最佳模型
+  - 默认训练轮数提升至 150，早停耐心值提升至 30
+- **CLI 增强**:
+  - `--use-warmup`: 启用 Cosine Warmup 调度器
+  - `--use-weighted-sampler`: 启用类别平衡采样
+  - `--use-swa`: 启用随机权重平均
+  - `efficientnetv2m`, `convnextsmall` 加入模型选择列表
+- **评估优化**:
+  - `--task evaluate` 默认启用 TTA
 
 ### v1.04 (2026-05-22)
 - **数据增强优化**:
@@ -562,6 +672,6 @@ MIT License
 
 ---
 
-**最后更新**: 2026年5月19日
+**最后更新**: 2026年5月27日
 
-**项目状态**: 开发中 🚀
+**项目状态**: ✅ 完成

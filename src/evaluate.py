@@ -371,11 +371,12 @@ class EnsembleClassifier:
         if transform:
             img_tensor = transform(img).unsqueeze(0).to(self.device)
         else:
-            img_tensor = transforms.Compose([
+            transform_pipeline = transforms.Compose([
                 transforms.Resize((224, 224)),
                 transforms.ToTensor(),
                 transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-            )(img).unsqueeze(0).to(self.device)
+            ])
+            img_tensor = transform_pipeline(img).unsqueeze(0).to(self.device)
 
         all_probs = []
 
@@ -422,13 +423,18 @@ def evaluate_baseline_models(data_dir, models_dir='models', output_dir='logs',
     logger.info("加载测试数据...")
     _, _, test_loader = create_dataloaders(data_dir, batch_size=32, num_workers=num_workers)
 
-    # 模型配置（v1.03: 新增 EfficientNetV2-S 和 ConvNeXt Tiny）
+    # 模型配置（v1.06: 新增 EfficientNetV2-M, ConvNeXt Small）
     models_config = [
         {'name': 'simple_cnn', 'pretrained': False},
+        {'name': 'simple_cnn_v2', 'pretrained': False},
         {'name': 'mobilenetv2', 'pretrained': True},
+        {'name': 'mobilenetv2_se', 'pretrained': True},
         {'name': 'resnet18', 'pretrained': True},
+        {'name': 'resnet50', 'pretrained': True},
         {'name': 'efficientnetv2s', 'pretrained': True},
+        {'name': 'efficientnetv2m', 'pretrained': True},
         {'name': 'convnexttiny', 'pretrained': True},
+        {'name': 'convnextsmall', 'pretrained': True},
     ]
 
     if models_to_evaluate is not None:
