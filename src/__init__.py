@@ -2,7 +2,7 @@
 项目初始化模块
 """
 
-__version__ = "1.03"
+__version__ = "1.06"
 
 import os
 import sys
