@@ -245,7 +245,3 @@ python run.py --task evaluate --models efficientnetv2s --use-tta
 ```
 
 ---
-
-**实验人员**: AI Assistant
-**报告生成时间**: 2026-05-27
-**实验版本**: v1.06
