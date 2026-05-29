@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html><head><style>
+html, body { margin: 0; padding: 0; width: 720pt; height: 405pt; overflow: hidden; }
+body { font-family: Arial, sans-serif; display: flex; flex-direction: column; background: #0D47A1; }
+.content { padding: 35pt 45pt; }
+h1 { color: #FFFFFF; font-size: 28pt; font-weight: bold; margin: 0 0 4pt 0; }
+.divider { width: 40pt; height: 3pt; background: #42A5F5; margin-bottom: 20pt; }
+.summary-row { display: flex; gap: 18pt; margin-bottom: 18pt; }
+.summary-card { flex: 1; background: rgba(255,255,255,0.1); border-radius: 6pt; padding: 14pt; }
+.summary-title { color: #90CAF9; font-size: 14pt; font-weight: bold; margin: 0 0 4pt 0; }
+.summary-text { color: #E3F2FD; font-size: 12pt; margin: 0; }
+.summary-text2 { color: #E3F2FD; font-size: 12pt; margin: 0; }
+ul { list-style: none; padding: 0; margin: 0; }
+li { color: #BBDEFB; font-size: 13pt; margin-bottom: 5pt; padding-left: 18pt; position: relative; }
+li:before { content: "▸"; color: #42A5F5; position: absolute; left: 0; }
+.bottom-bar { position: absolute; bottom: 25pt; left: 0; right: 0; text-align: center; }
+.bottom-bar p { color: #64B5F6; font-size: 12pt; margin: 0; }
+p { margin: 0; }
+</style></head><body>
+<div class="content">
+<h1>总结与展望</h1>
+<div class="divider"></div>
+<div class="summary-row">
+  <div class="summary-card"><p class="summary-title">核心成果</p><p class="summary-text">ConvNeXt Small 最佳模型：<b>97.48%</b> 测试准确率</p><p class="summary-text2">数据扩充 + 联合优化策略</p></div>
+  <div class="summary-card"><p class="summary-title">关键发现</p><p class="summary-text">少数类识别瓶颈可通过系统性方法突破</p><p class="summary-text2">trash类F1: 0.743 → 0.955 (+0.212)</p></div>
+</div>
+<ul>
+  <li><b>展望1</b> — 模型量化部署 (INT8/TensorRT) 实现移动端实时推理</li>
+  <li><b>展望2</b> — 从图像分类扩展为目标检测（多物体识别）</li>
+  <li><b>展望3</b> — 细粒度分类（塑料细分PET/PP/PE等）</li>
+  <li><b>展望4</b> — 增量学习支持上线后持续更新</li>
+</ul>
+<div class="bottom-bar"><p>感谢聆听 · 欢迎提问</p></div>
+</div>
+</body></html>

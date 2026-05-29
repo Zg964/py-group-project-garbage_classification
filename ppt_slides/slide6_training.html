@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html><head><style>
+html, body { margin: 0; padding: 0; width: 720pt; height: 405pt; overflow: hidden; }
+body { font-family: Arial, sans-serif; display: flex; background: #FFFFFF; }
+.sidebar { width: 10pt; background: #1565C0; height: 100%; }
+.content { padding: 25pt 30pt; flex: 1; }
+h1 { color: #0D47A1; font-size: 24pt; font-weight: bold; margin: 0 0 4pt 0; }
+.divider { width: 40pt; height: 2pt; background: #42A5F5; margin-bottom: 14pt; }
+.opt-grid { display: flex; flex-wrap: wrap; gap: 8pt; }
+.opt-card { background: #F5F8FF; border-radius: 5pt; padding: 8pt 12pt; width: 45%; border-top: 3pt solid #1565C0; }
+.opt-title { color: #0D47A1; font-size: 12pt; font-weight: bold; margin: 0 0 2pt 0; }
+.opt-desc { color: #555; font-size: 10pt; margin: 0; }
+.opt-desc2 { color: #555; font-size: 10pt; margin: 0; }
+.tag-sm { display: inline-block; background: #FFF3E0; color: #E65100; padding: 1pt 5pt; border-radius: 2pt; font-size: 9pt; }
+p { margin: 0; }
+</style></head><body>
+<div class="sidebar"></div>
+<div class="content">
+<h1>训练优化策略</h1>
+<div class="divider"></div>
+<div class="opt-grid">
+  <div class="opt-card"><p class="opt-title">损失函数</p><p class="opt-desc"><span class="tag-sm">v1.06</span> Focal Loss (γ=2.0) + 标签平滑</p><p class="opt-desc2">联合损失，聚焦难分类样本</p></div>
+  <div class="opt-card"><p class="opt-title">学习率调度器</p><p class="opt-desc"><span class="tag-sm">v1.06</span> Cosine Warmup (5 epoch)</p><p class="opt-desc2">+ CosineAnnealingLR 余弦退火</p></div>
+  <div class="opt-card"><p class="opt-title">优化器</p><p class="opt-desc">SGD Nesterov (lr=0.01) — V2系列</p><p class="opt-desc2">AdamW (lr=1e-4) — ConvNeXt</p></div>
+  <div class="opt-card"><p class="opt-title">正则化</p><p class="opt-desc">梯度裁剪 · Early Stopping (30轮)</p><p class="opt-desc2">Dropout (0.2~0.3) · 权重衰减</p></div>
+  <div class="opt-card"><p class="opt-title">高阶技巧</p><p class="opt-desc"><span class="tag-sm">v1.05</span> EMA 指数移动平均</p><p class="opt-desc2"><span class="tag-sm">v1.06</span> SWA 随机权重平均</p></div>
+  <div class="opt-card"><p class="opt-title">测试时增强</p><p class="opt-desc"><span class="tag-sm">v1.04</span> TTA: 每张图9次增强平均</p><p class="opt-desc2">翻转 + 多角度旋转</p></div>
+</div>
+</div>
+</body></html>

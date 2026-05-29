@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html><head><style>
+html, body { margin: 0; padding: 0; width: 720pt; height: 405pt; overflow: hidden; }
+body { font-family: Arial, sans-serif; display: flex; background: #FFFFFF; }
+.sidebar { width: 10pt; background: #1565C0; height: 100%; }
+.content { padding: 25pt 30pt; flex: 1; }
+h1 { color: #0D47A1; font-size: 24pt; font-weight: bold; margin: 0 0 4pt 0; }
+.divider { width: 40pt; height: 2pt; background: #42A5F5; margin-bottom: 14pt; }
+.stats-row { display: flex; gap: 12pt; margin-bottom: 12pt; }
+.stat-box { background: #E3F2FD; border-radius: 5pt; padding: 10pt 12pt; text-align: center; flex: 1; }
+.stat-num { color: #1565C0; font-size: 22pt; font-weight: bold; margin: 0; }
+.stat-label { color: #555; font-size: 10pt; margin: 2pt 0 0 0; }
+.stat-sub { color: #888; font-size: 8pt; margin: 0; }
+.flow-row { display: flex; align-items: center; gap: 6pt; margin-top: 6pt; }
+.flow-step { background: #1565C0; color: white; padding: 6pt 10pt; border-radius: 3pt; }
+.flow-step p { margin: 0; font-size: 11pt; }
+.flow-arrow { color: #1565C0; font-size: 14pt; margin: 0; }
+p { margin: 0; }
+.ds { color: #333; font-size: 12pt; margin: 3pt 0; }
+</style></head><body>
+<div class="sidebar"></div>
+<div class="content">
+<h1>数据集处理</h1>
+<div class="divider"></div>
+<div class="stats-row">
+  <div class="stat-box"><p class="stat-num">2,497</p><p class="stat-label">原始图片数</p><p class="stat-sub">Kaggle</p></div>
+  <div class="stat-box"><p class="stat-num">10,518</p><p class="stat-label">扩充后图片数</p><p class="stat-sub">+321%</p></div>
+  <div class="stat-box"><p class="stat-num">6</p><p class="stat-label">垃圾类别</p><p class="stat-sub">全部6类</p></div>
+</div>
+<p class="ds"><b>数据源扩充：</b>Kaggle + omasteam + realwaste (Hugging Face)</p>
+<p class="ds">trash类从 <b>136张 → 948张</b>（+597%）</p>
+<div class="flow-row">
+  <div class="flow-step"><p>损坏移除</p></div><p class="flow-arrow">→</p>
+  <div class="flow-step"><p>pHash去重</p></div><p class="flow-arrow">→</p>
+  <div class="flow-step"><p>标签验证</p></div><p class="flow-arrow">→</p>
+  <div class="flow-step"><p>数据清单</p></div>
+</div>
+</div>
+</body></html>

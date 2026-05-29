@@ -380,8 +380,8 @@ print(f"Macro-F1: {metrics['macro_f1']:.4f}")
 | EfficientNetV2-S | ~21M | 90.00% | 0.8895 | 46.28ms | v1.03 |
 | ConvNeXt Tiny | ~28M | 39.40% | 0.3736 | 205.10ms | v1.03 |
 | **EfficientNetV2-S (v1.06)** | **~21M** | **96.53%** | **0.9633** | 73.00ms (TTA) | **v1.06** |
-| EfficientNetV2-M | ~53M | *待训练* | *待训练* | *待测试* | v1.06 |
-| ConvNeXt Small | ~50M | *待训练* | *待训练* | *待测试* | v1.06 |
+| EfficientNetV2-M | ~53M | 96.96% | 0.9664 | 4946ms (TTA) | v1.07 |
+| **ConvNeXt Small** | **~50M** | **97.48%** | **0.9723** | 2817ms (TTA) | **v1.07** |
 
 ### v1.06 实验结果（EfficientNetV2-S）
 
@@ -672,6 +672,6 @@ MIT License
 
 ---
 
-**最后更新**: 2026年5月27日
+**最后更新**: 2026年5月29日
 
 **项目状态**: ✅ 完成
