@@ -14,7 +14,7 @@ DEFAULT_IMAGE_SIZE = (224, 224)
 GARBAGE_CLASSES = ['cardboard', 'glass', 'metal', 'paper', 'plastic', 'trash']
 CLASS_NAMES = GARBAGE_CLASSES  # 别名
 CLASS_TO_IDX = {cls: idx for idx, cls in enumerate(GARBAGE_CLASSES)}
-IDX_TO_CLASS = {idx: cls for idx, cls in CLASS_TO_IDX.items()}
+IDX_TO_CLASS = {idx: cls for cls, idx in CLASS_TO_IDX.items()}
 
 # v1.06: 更新训练轮数和早停耐心值
 DEFAULT_BATCH_SIZE = 32

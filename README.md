@@ -48,6 +48,13 @@ garbage_classification/
 ├── models/                        # 保存的模型权重
 ├── logs/                          # 训练日志和评估结果
 ├── notebooks/                     # Jupyter 笔记本
+├── web/                          # Web 前端展示模块（v1.08 新增）
+│   ├── api_server.py             # FastAPI 后端推理 API
+│   ├── run_frontend.py           # 一键启动脚本
+│   └── frontend/                 # 静态前端页面
+│       ├── index.html            # 页面结构
+│       ├── style.css             # 样式（绿色环保主题）
+│       └── app.js                # 交互逻辑
 ├── app.py                         # Streamlit 演示应用
 ├── run.py                         # 综合运行脚本
 ├── requirements.txt              # 依赖列表
@@ -237,6 +244,35 @@ streamlit run app.py
 - 📈 详细评估指标
 - ♻️ 垃圾分类建议
 
+### 7. 启动 Web 前端展示（v1.08 新增）
+
+提供基于 FastAPI 的 Web 页面，无需安装 Streamlit，浏览器直接访问。
+
+```bash
+# 一键启动
+python web/run_frontend.py
+
+# 或直接运行
+cd web && python api_server.py
+```
+
+打开浏览器访问 `http://localhost:8000`
+
+**功能**：
+- 🤖 **模型选择**：下拉框切换 10 个训练好的模型（含 BEST/SWA 变体），实时显示模型信息
+- 📷 **图片上传**：支持拖拽上传和点击选择，实时预览
+- 📊 **识别结果**：显示预测类别（中英文）、置信度、概率柱状图（CSS 动画）
+- ♻️ **分类建议**：根据识别结果给出垃圾分类建议
+- ⚡ **推理信息**：显示使用的模型名称和推理耗时
+
+**API 接口**：
+
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| `GET /api/models` | 获取可用模型列表 | 返回模型名称、大小、准确率等 |
+| `POST /api/predict` | 垃圾分类预测 | 上传图片 + 选择模型，返回识别结果 |
+| `/docs` | API 交互文档 | Swagger UI 在线调试 |
+
 ---
 
 ## 详细用法
@@ -356,11 +392,14 @@ print(f"Macro-F1: {metrics['macro_f1']:.4f}")
 
 ### 交互界面特性
 
-- ✓ 图像上传和实时预测
+- ✓ 图像上传和实时预测（Streamlit + Web 双前端）
 - ✓ 预测置信度显示
-- ✓ 各类别概率分布
+- ✓ 各类别概率分布（CSS 柱状图动画）
 - ✓ 模型对比仪表板
 - ✓ 垃圾分类建议
+- ✓ 10 个模型一键切换（含 BEST/SWA 变体）（v1.08 新增）
+- ✓ 拖拽上传图片（v1.08 新增）
+- ✓ REST API 接口，支持第三方集成（v1.08 新增）
 
 ---
 
@@ -518,7 +557,7 @@ with torch.no_grad():
 - **数据处理**: NumPy, Pandas, OpenCV
 - **可视化**: Matplotlib, Seaborn
 - **机器学习**: Scikit-learn
-- **Web 框架**: Streamlit
+- **Web 框架**: Streamlit（交互式演示）、FastAPI + Uvicorn（Web API 服务）
 - **Python 版本**: 3.8+
 
 ---
@@ -567,7 +606,20 @@ MIT License
 
 ## 更新日志
 
-### v1.06 (2026-05-27)
+### v1.08 (2026-06-05)
+- **Web 前端展示模块**:
+  - 新增 `web/` 目录，包含独立的前端展示系统
+  - FastAPI 后端 API：`GET /api/models`（模型列表）、`POST /api/predict`（垃圾分类预测）
+  - LRU 模型缓存（最多保持 2 个模型同时加载），切换模型自动卸载
+  - CORS 跨域支持，方便第三方集成
+- **静态前端页面**（纯 HTML/CSS/JS，无需额外框架）:
+  - 模型选择区：下拉框切换 10 个模型，实时显示大小/速度/准确率标签
+  - 图片上传区：支持拖拽上传和点击选择，实时预览
+  - 识别结果区：预测类别（中英文）、置信度、CSS 概率柱状图（逐条动画）、分类建议
+  - 推理信息：显示使用模型和推理耗时
+  - 绿色环保主题，响应式设计，适配桌面和移动端
+- **启动方式**: `python web/run_frontend.py`，浏览器访问 `http://localhost:8000`
+- **依赖新增**: fastapi, uvicorn, python-multipart
 - **数据集大规模扩充**:
   - 新增 Hugging Face 数据集源: omasteam/waste-garbage-management-dataset (MIT)
   - 新增 Hugging Face 数据集源: shahzaibvohra/realwaste (CC BY 4.0)

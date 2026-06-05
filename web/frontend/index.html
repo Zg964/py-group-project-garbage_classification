@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能垃圾分类识别系统</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- 头部 -->
+        <header class="header">
+            <div class="header-icon">♻️</div>
+            <h1>智能垃圾分类识别系统</h1>
+            <p class="subtitle">基于深度学习的垃圾图像分类与识别</p>
+        </header>
+
+        <!-- 主内容区 -->
+        <main class="main-content">
+            <!-- 左侧：上传区域 -->
+            <section class="left-panel">
+                <!-- 模型选择 -->
+                <div class="card model-select-card">
+                    <h2 class="card-title">
+                        <span class="icon">🤖</span>
+                        选择模型
+                    </h2>
+                    <div class="model-select-wrapper">
+                        <select id="model-select" class="model-select">
+                            <option value="">正在加载模型列表...</option>
+                        </select>
+                        <div id="model-info" class="model-info">
+                            <span class="model-info-placeholder">请选择模型以查看详情</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 图片上传 -->
+                <div class="card upload-card">
+                    <h2 class="card-title">
+                        <span class="icon">📷</span>
+                        上传图片
+                    </h2>
+                    <div class="upload-area" id="upload-area">
+                        <div class="upload-content" id="upload-content">
+                            <div class="upload-icon">📤</div>
+                            <p class="upload-text">拖拽图片到此处，或点击选择文件</p>
+                            <p class="upload-hint">支持 JPG、PNG 格式</p>
+                            <button class="upload-btn" id="upload-btn">选择图片</button>
+                        </div>
+                        <div class="preview-area hidden" id="preview-area">
+                            <img id="preview-image" class="preview-image" alt="预览图片">
+                            <button class="change-btn" id="change-btn">重新选择</button>
+                        </div>
+                        <input type="file" id="file-input" accept="image/*" hidden>
+                    </div>
+                </div>
+
+                <!-- 预测按钮 -->
+                <button class="predict-btn" id="predict-btn" disabled>
+                    <span class="btn-icon">🔍</span>
+                    开始识别
+                </button>
+            </section>
+
+            <!-- 右侧：结果展示 -->
+            <section class="right-panel">
+                <div class="card result-card">
+                    <h2 class="card-title">
+                        <span class="icon">📊</span>
+                        识别结果
+                    </h2>
+
+                    <!-- 加载动画 -->
+                    <div class="loading-area hidden" id="loading-area">
+                        <div class="spinner"></div>
+                        <p class="loading-text">正在分析图片，请稍候...</p>
+                    </div>
+
+                    <!-- 结果内容 -->
+                    <div class="result-area hidden" id="result-area">
+                        <!-- 顶部：主要预测 -->
+                        <div class="top-result" id="top-result">
+                            <div class="result-badge" id="result-badge">可回收物</div>
+                            <div class="result-class">
+                                <span class="result-class-cn" id="result-class-cn">塑料</span>
+                                <span class="result-class-en" id="result-class-en">plastic</span>
+                            </div>
+                            <div class="result-confidence">
+                                <span class="confidence-label">置信度</span>
+                                <span class="confidence-value" id="confidence-value">95.0%</span>
+                            </div>
+                        </div>
+
+                        <!-- 中部：概率柱状图 -->
+                        <div class="chart-section">
+                            <h3 class="section-title">各类别概率</h3>
+                            <div class="bar-chart" id="bar-chart">
+                                <!-- 由 JS 动态生成 -->
+                            </div>
+                        </div>
+
+                        <!-- 底部：分类建议 -->
+                        <div class="advice-section">
+                            <h3 class="section-title">
+                                <span class="icon">💡</span>
+                                分类建议
+                            </h3>
+                            <p class="advice-text" id="advice-text"></p>
+                        </div>
+
+                        <!-- 推理信息 -->
+                        <div class="inference-info" id="inference-info">
+                            <span class="info-item">
+                                <span class="info-label">模型：</span>
+                                <span id="info-model"></span>
+                            </span>
+                            <span class="info-divider">|</span>
+                            <span class="info-item">
+                                <span class="info-label">耗时：</span>
+                                <span id="info-time"></span>
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- 空状态 -->
+                    <div class="empty-state" id="empty-state">
+                        <div class="empty-icon">🔬</div>
+                        <p class="empty-text">选择图片并点击"开始识别"<br>查看垃圾分类结果</p>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- 底部 -->
+        <footer class="footer">
+            <p>智能垃圾分类识别系统 &copy; 2024 | 基于 PyTorch 深度学习框架</p>
+        </footer>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
