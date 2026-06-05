@@ -35,9 +35,9 @@ wheels/
 .ipynb_checkpoints/
 *.ipynb
 
-# Models
-models/*.pth
-models/*.pt
+# Models (使用 Git LFS 管理，见 .gitattributes)
+# models/*.pth
+# models/*.pt
 !models/.gitkeep
 
 # Logs
